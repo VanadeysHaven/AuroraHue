@@ -1,0 +1,30 @@
+# Secrets (injected at runtime via env_file, never baked into the image)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# VCS / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Dev-only deps
+requirements-dev.txt

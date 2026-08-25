@@ -1,0 +1,36 @@
+services:
+  bot:
+    build: .
+    image: aurorahue:latest
+    container_name: aurorahue-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+      # Deploy info (COMMIT / BRANCH / DEPLOY_TIME) written by update.sh.
+      # Optional so `docker compose up` works before the first update.sh run.
+      - path: configs/git.env
+        required: false
+    # Uncomment once the db service below is enabled.
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # Placeholder for the future database. Uncomment and adjust when needed.
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: aurorahue-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: aurorahue
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: aurorahue
+  #   volumes:
+  #     - db-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U aurorahue"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+# volumes:
+#   db-data:
