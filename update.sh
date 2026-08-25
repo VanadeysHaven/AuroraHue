@@ -22,7 +22,7 @@ touch configs/git.env
   DEPLOY_TIME=$time_bot"
 } >> configs/git.env
 
-database_state=$(sudo docker inspect --format="{{.State.Running}}" aurorahue-db 2>/dev/null)
+database_state=$(docker inspect --format="{{.State.Running}}" aurorahue-db 2>/dev/null)
 if [[ $* == "--skip-db" ]];
 then
   echo "Skipping backup database"
@@ -30,14 +30,14 @@ else
   if [ "$database_state" == "true" ];
   then
     echo "Backing up database..."
-    sudo docker exec -t aurorahue-db sh -c 'exec pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}"' | sudo tee backups/backup-"$time_file".sql > /dev/null
+    docker exec -t aurorahue-db sh -c 'exec pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}"' > backups/backup-"$time_file".sql
   fi
 fi
 
 echo "Shutting down bot..."
-sudo docker compose down
+docker compose down
 
 echo "Rebuilding images and launching..."
-sudo docker compose up -d --remove-orphans --build
+docker compose up -d --remove-orphans --build
 
 echo "Done! Bot will connect to Discord shortly."
