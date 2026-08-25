@@ -12,7 +12,7 @@ from .config import Config
 log = logging.getLogger(__name__)
 
 # Cogs (extensions) loaded on startup. Add new modules here.
-INITIAL_EXTENSIONS: tuple[str, ...] = ("aurorahue.cogs.general",)
+INITIAL_EXTENSIONS: tuple[str, ...] = ("aurorahue.cogs.general", "aurorahue.cogs.light_toggle")
 
 
 class AuroraHue(commands.Bot):

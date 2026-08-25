@@ -13,6 +13,10 @@ class Config:
     """Runtime configuration for the bot."""
 
     token: str
+
+    hue_app_key: str
+    hue_bridge_ip: str
+
     command_prefix: str = "!"
     guild_ids: tuple[int, ...] = field(default_factory=tuple)
 
@@ -34,4 +38,7 @@ class Config:
             int(part) for part in raw_guilds.split(",") if part.strip()
         )
 
-        return cls(token=token, command_prefix=prefix, guild_ids=guild_ids)
+        hue_app_key = os.environ.get("HUE_APP_KEY", "").strip()
+        hue_bridge_ip = os.environ.get("HUE_BRIDGE_IP", "").strip()
+        
+        return cls(token=token, command_prefix=prefix, guild_ids=guild_ids, hue_app_key=hue_app_key, hue_bridge_ip=hue_bridge_ip)
