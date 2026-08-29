@@ -17,6 +17,9 @@ class Config:
     hue_app_key: str
     hue_bridge_ip: str
 
+    latitude: float
+    longitude: float
+
     command_prefix: str = "!"
     guild_ids: tuple[int, ...] = field(default_factory=tuple)
     allowed_user_ids: tuple[int, ...] = field(default_factory=tuple)
@@ -47,4 +50,16 @@ class Config:
         hue_app_key = os.environ.get("HUE_APP_KEY", "").strip()
         hue_bridge_ip = os.environ.get("HUE_BRIDGE_IP", "").strip()
 
-        return cls(token=token, command_prefix=prefix, guild_ids=guild_ids, allowed_user_ids=allowed_user_ids, hue_app_key=hue_app_key, hue_bridge_ip=hue_bridge_ip)
+        latitude = float(os.environ.get("LATITUDE", "0") or "0")
+        longitude = float(os.environ.get("LONGITUDE", "0") or "0")
+
+        return cls(
+            token=token,
+            command_prefix=prefix,
+            guild_ids=guild_ids,
+            allowed_user_ids=allowed_user_ids,
+            hue_app_key=hue_app_key,
+            hue_bridge_ip=hue_bridge_ip,
+            latitude=latitude,
+            longitude=longitude,
+        )

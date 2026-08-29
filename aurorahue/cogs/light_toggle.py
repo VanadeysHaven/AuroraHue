@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from aurorahue.helpers import sun_finder
 from aurorahue.hue.hue_client import HueClient
 
 
@@ -20,11 +21,33 @@ def is_allowed():
     return app_commands.check(predicate)
 
 
+class ConfirmView(discord.ui.View):
+    def __init__(self, caller_id: int):
+        super().__init__(timeout=60)
+        self.caller_id = caller_id
+        self.value: bool | None = None
+
+    async def interaction_check(self, interaction):
+        return interaction.user.id == self.caller_id
+
+    @discord.ui.button(label="Turn on anyway", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.value = Truecp
+        await interaction.response.edit_message(content="Turning on...", view=None)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.value = False
+        await interaction.response.edit_message(content="Cancelled.", view=None)
+        self.stop()
+
+
 class LightToggle(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        config = bot.config
-        self.hue_client = HueClient(bridge_ip=config.hue_bridge_ip, app_key=config.hue_app_key)
+        self.config = bot.config
+        self.hue_client = HueClient(bridge_ip=self.config.hue_bridge_ip, app_key=self.config.hue_app_key)
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
@@ -41,7 +64,18 @@ class LightToggle(commands.Cog):
     @app_commands.command(name="on", description="Turn all lights on.")
     @is_allowed()
     async def lights_on(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+
+        if sun_finder.is_daytime(self.config):
+            view = ConfirmView(interaction.user.id)
+            await interaction.followup.send(
+                f"It's daytime - {sun_finder.get_sun_phase_message(self.config)} Turn the lights on?",
+                view=view, ephemeral=True,
+            )
+            await view.wait()
+            if not view.value:
+                return
+
         await self.hue_client.set_all_lights(on=True)
         await interaction.followup.send("Turned lights on!")
 
