@@ -47,6 +47,17 @@ class AuroraHue(commands.Bot):
     async def on_ready(self) -> None:
         log.info("Logged in as %s (id: %s)", self.user, getattr(self.user, "id", "?"))
 
+    async def close(self) -> None:
+        """Gracefully log out from Discord on shutdown.
+
+        Invoked by discord.py's signal handlers (SIGINT/SIGTERM) and on any
+        other shutdown path. Delegating to ``super().close()`` closes the
+        websocket and HTTP session so the bot logs out cleanly.
+        """
+        log.info("Shutting down: logging out from Discord")
+        await super().close()
+        log.info("Logged out from Discord")
+
 
 def run(config: Config) -> None:
     """Create and run the bot until it disconnects."""
