@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from aurorahue.helpers import sun_finder
-from aurorahue.hue.hue_client import HueClient
+from aurorahue.hue.hue_client import HueClient, ON_EXCLUDED_LIGHT_IDS
 
 
 def is_allowed():
@@ -32,7 +32,7 @@ class ConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Turn on anyway", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.value = Truecp
+        self.value = True
         await interaction.response.edit_message(content="Turning on...", view=None)
         self.stop()
 
@@ -76,7 +76,7 @@ class LightToggle(commands.Cog):
             if not view.value:
                 return
 
-        await self.hue_client.set_all_lights(on=True)
+        await self.hue_client.set_all_lights(on=True, exclude=ON_EXCLUDED_LIGHT_IDS)
         await interaction.followup.send("Turned lights on!")
 
     @app_commands.command(name="off", description="Turn all lights off.")
