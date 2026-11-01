@@ -17,6 +17,10 @@ ON_STATE = {
     'color_temperature': {'mirek': 447},
 }
 
+# Hue CLIP v2 treats brightness 0 as "lowest possible brightness", not off.
+MINIMUM_BRIGHTNESS = 0.0
+SOFT_BRIGHTNESS = ON_STATE['dimming']['brightness'] / 2
+
 class HueClient:
     def __init__(self, bridge_ip: str, app_key: str):
         self._client = httpx2.AsyncClient(
@@ -26,21 +30,25 @@ class HueClient:
             timeout=10.0,
         )
 
-    async def set_light(self, light_id: str, on: bool):
+    async def set_light(self, light_id: str, on: bool, brightness: float | None = None):
         payload = {'on': {'on': on}}
         if on:
             payload |= ON_STATE
+            if brightness is not None:
+                payload['dimming'] = {'brightness': brightness}
         resp = await self._client.put(
             f'/resource/light/{light_id}',
             json=payload,
         )
         resp.raise_for_status()
 
-    async def set_all_lights(self, on: bool, exclude: frozenset[str] = frozenset()):
+    async def set_all_lights(
+        self, on: bool, exclude: frozenset[str] = frozenset(), brightness: float | None = None
+    ):
         for light_id in LIGHT_IDS:
             if light_id in exclude:
                 continue
-            await self.set_light(light_id, on)
+            await self.set_light(light_id, on, brightness)
 
     async def aclose(self) -> None:
         await self._client.aclose()

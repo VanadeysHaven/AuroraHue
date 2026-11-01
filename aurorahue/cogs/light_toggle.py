@@ -3,7 +3,12 @@ from discord import app_commands
 from discord.ext import commands
 
 from aurorahue.helpers import sun_finder
-from aurorahue.hue.hue_client import HueClient, ON_EXCLUDED_LIGHT_IDS
+from aurorahue.hue.hue_client import (
+    HueClient,
+    MINIMUM_BRIGHTNESS,
+    ON_EXCLUDED_LIGHT_IDS,
+    SOFT_BRIGHTNESS,
+)
 
 
 def is_allowed():
@@ -61,9 +66,10 @@ class LightToggle(commands.Cog):
             return
         raise error
 
-    @app_commands.command(name="on", description="Turn all lights on.")
-    @is_allowed()
-    async def lights_on(self, interaction: discord.Interaction):
+    async def _turn_on_gated(
+        self, interaction: discord.Interaction, brightness: float | None, done_message: str
+    ) -> None:
+        """Turn lights on, asking for confirmation first if it's daytime."""
         await interaction.response.defer(ephemeral=True)
 
         if sun_finder.is_daytime(self.config):
@@ -76,8 +82,25 @@ class LightToggle(commands.Cog):
             if not view.value:
                 return
 
-        await self.hue_client.set_all_lights(on=True, exclude=ON_EXCLUDED_LIGHT_IDS)
-        await interaction.followup.send("Turned lights on!")
+        await self.hue_client.set_all_lights(
+            on=True, exclude=ON_EXCLUDED_LIGHT_IDS, brightness=brightness
+        )
+        await interaction.followup.send(done_message)
+
+    @app_commands.command(name="on", description="Turn all lights on.")
+    @is_allowed()
+    async def lights_on(self, interaction: discord.Interaction):
+        await self._turn_on_gated(interaction, None, "Turned lights on!")
+
+    @app_commands.command(name="minimum", description="Turn all lights on at minimum brightness.")
+    @is_allowed()
+    async def lights_minimum(self, interaction: discord.Interaction):
+        await self._turn_on_gated(interaction, MINIMUM_BRIGHTNESS, "Set lights to minimum brightness!")
+
+    @app_commands.command(name="soft", description="Turn all lights on at half brightness.")
+    @is_allowed()
+    async def lights_soft(self, interaction: discord.Interaction):
+        await self._turn_on_gated(interaction, SOFT_BRIGHTNESS, "Set lights to soft brightness!")
 
     @app_commands.command(name="off", description="Turn all lights off.")
     @is_allowed()
