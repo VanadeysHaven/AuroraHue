@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** in progress (segments 1 and 2 waiting for review, 2026-11-23).
+**Status:** in progress (segments 1 and 2 done, 2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -13,8 +13,8 @@ optional set of lights; `/minimum` and `/soft` go away.
 
 | Seg | Title | Branch | Status |
 |---|---|---|---|
-| 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | 👀 waiting for review |
-| 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | 👀 waiting for review |
+| 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | ✅ done |
+| 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ✅ done |
 | 3 | Direct light commands | `claude/lights-and-scenes-s3` | ⬜ todo |
 | 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ⬜ todo |
 | 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ⬜ todo |
@@ -238,7 +238,7 @@ Nothing open.
 
 ## Segment 1 — Database foundation
 
-**Branch:** `claude/lights-and-scenes-s1` · **Status:** 👀 waiting for review · **Migration:** `0001` (empty)
+**Branch:** `claude/lights-and-scenes-s1` · **Status:** ✅ done · **Migration:** `0001` (empty)
 
 Bring Sidequest's database setup to AuroraHue, with no tables yet, plus a test harness (AuroraHue has
 no tests today). Reference files in the Sidequest repo are named per item; port them, don't redesign.
@@ -316,7 +316,7 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 2 — Light registry and the access file
 
-**Branch:** `claude/lights-and-scenes-s2` · **Status:** 👀 waiting for review · **Migration:** none
+**Branch:** `claude/lights-and-scenes-s2` · **Status:** ✅ done · **Migration:** none
 
 **Checklist**
 1. [x] **`core/errors.py`, `core/access.py`** — main session: errors from §6; `LightAccess` (§2).
