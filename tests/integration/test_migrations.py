@@ -33,6 +33,6 @@ def test_upgrade_downgrade_upgrade(migrated_database: str) -> None:
     assert _scalar(migrated_database, "SELECT count(*) FROM alembic_version") == 0
 
     command.upgrade(cfg, "head")
-    # Segment 4 adds checks for the scenes/settings tables.
+    # What 0002 creates is checked in test_migration_0002.py.
     head = ScriptDirectory.from_config(cfg).get_current_head()
     assert _scalar(migrated_database, "SELECT version_num FROM alembic_version") == head

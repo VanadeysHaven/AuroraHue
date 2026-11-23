@@ -101,8 +101,13 @@ aurorahue/core/color.py     Hex, Kelvin, Color, hex_to_xy, kelvin_to_mirek (rest
 aurorahue/services/lights.py  LightService: 60 s light cache, allowed(), resolve(), apply() ->
                             ApplyReport; LightRequest (on, colour, brightness %); every write checks
                             LightAccess again
+aurorahue/services/scenes.py  SceneService (sessions, LightService, clock): list/get/get_by_id/
+                            create/update/delete/actions_for_run/run; validates on save (D13)
+aurorahue/services/settings.py  SettingsService: get_settings(), set_reset_scene() (D18, D19)
+aurorahue/services/model.py StrictModel (frozen, strict pydantic), SessionFactory
 aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), session.py, migrate.py,
-                            url.py (DATABASE_URL only, for Alembic), models.py (no tables yet)
+                            url.py (DATABASE_URL only, for Alembic), models.py (Scene, SceneAction,
+                            BotSettings)
 migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…
 aurorahue/cogs/general.py   /ping
 aurorahue/cogs/light_toggle.py  /on /minimum /soft /off on every allowed light via LightService
@@ -111,9 +116,10 @@ aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False): list_ligh
                             apply(id, LightState) (one PUT); HTTP errors -> BridgeUnavailable
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
 ```
-No tables yet (scenes and settings arrive in segment 4). Tests: `tests/unit` (layering, access file,
-light service with a fake client), `tests/integration` (migration round trip, fixtures in
-`conftest.py`). New code in `core`/`services`/`hue` uses absolute imports (the layering test only
+Tables (migration `0002`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1); the scene
+services aren't wired into the bot yet (segment 5). Tests: `tests/unit` (layering, access file,
+light service with a fake client), `tests/integration` (migrations, scenes and settings services;
+fixtures in `conftest.py`, fake bridge in `tests/support/`). New code in `core`/`services`/`hue` uses absolute imports (the layering test only
 sees those).
 
 ### Target *(after lights-and-scenes)*
