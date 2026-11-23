@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** in progress (segments 1 and 2 done, 2026-11-23).
+**Status:** in progress (segments 1 and 2 done; 3 and 4 waiting for review, 2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -15,8 +15,8 @@ optional set of lights; `/minimum` and `/soft` go away.
 |---|---|---|---|
 | 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | ✅ done |
 | 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ✅ done |
-| 3 | Direct light commands | `claude/lights-and-scenes-s3` | ⬜ todo |
-| 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ⬜ todo |
+| 3 | Direct light commands | `claude/lights-and-scenes-s3` | 👀 waiting for review |
+| 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | 👀 waiting for review |
 | 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ⬜ todo |
 
 Segments 1 and 2 are independent (either order). 3 needs 2. 4 needs 1 (and 2's light registry for
@@ -398,11 +398,11 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 3 — Direct light commands
 
-**Branch:** `claude/lights-and-scenes-s3` · **Status:** ⬜ todo · **Migration:** none
+**Branch:** `claude/lights-and-scenes-s3` · **Status:** 👀 waiting for review · **Migration:** none
 
 **Checklist**
-1. [ ] **`core/color.py`** — main session (§3).
-2. [ ] **Colour tests** — Haiku, table-driven, `tests/unit/test_color.py`, reviewed.
+1. [x] **`core/color.py`** — main session (§3).
+2. [x] **Colour tests** — Haiku, table-driven, `tests/unit/test_color.py`, reviewed.
    `parse_color` → stored form: `#FF8800`, `ff8800`, `#f80`, `F80` → `#ff8800`; `2700K`, `2700k`,
    `2700 K`, ` 2700k ` → `2700K`; `2000K` and `6500K` accepted. Refused: `#ff880`, `#gg0000`, `""`,
    `#ff88001`, `#000000`, `000`, `1999K`, `6501K`, `K`, `27.5K`, `2700` (message mentions `2700K`).
@@ -412,16 +412,16 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
    `#ffffff`, `#ff8800`; `xy_to_hex(hex_to_xy("#336699")) == "#5badff"` (darkness dropped).
    `kelvin_to_mirek`: 2700 → 370, 6500 → 154, 2000 → 500, 2000 with `hi=454` → 454, 6500 with
    `lo=160` → 160. `mirek_to_kelvin`: 370 → 2700, 447 → 2250.
-3. [ ] **`cogs/common.py`** — main session: `is_allowed()`, `ConfirmView`, `confirm_if_daytime`
+3. [x] **`cogs/common.py`** — main session: `is_allowed()`, `ConfirmView`, `confirm_if_daytime`
    (D21), the `tree.on_error` handler, the `lights` option + autocomplete (D6), the `ApplyReport` reply text (D22).
-4. [ ] **`cogs/lights.py`** — main session builds `/on` and `/color` (both with the D21 confirm);
+4. [x] **`cogs/lights.py`** — main session builds `/on` and `/color` (both with the D21 confirm);
    then **Haiku** adds `/off` (pattern of `/on`, never confirms) and `/brightness` (pattern of `/color`),
    reviewed. Then `/lights` (main session, D23). Delete `cogs/light_toggle.py`; update
    `INITIAL_EXTENSIONS`.
-5. [ ] **Reply tests** — Haiku, table-driven, `tests/unit/test_replies.py`: all ok (1 light /
+5. [x] **Reply tests** — Haiku, table-driven, `tests/unit/test_replies.py`: all ok (1 light /
    n lights), with colour skipped, with failures, everything failed, bridge unreachable; names are
    escaped (`*`, `_`, `@`).
-6. [ ] **Checks**, **Docs** (Opus: `CLAUDE.md` §4 command list, Handoff).
+6. [x] **Checks**, **Docs** (Opus: `CLAUDE.md` §4 command list, Handoff).
 
 **Manual test (Tim)**
 - [ ] `/minimum` and `/soft` are gone (guild sync: at once; global: up to an hour).
@@ -439,7 +439,36 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 - [ ] `/lights` lists allowed lights with their state.
 - [ ] Someone not in `ALLOWED_USER_IDS` → "You are not allowed to use this command."
 
-**Handoff:** —
+**Handoff** (Claude, Opus 5.5, 2026-11-23)
+- *Built:* the rest of `core/color.py` (`parse_color` + `InvalidColor(InvalidInput)`, `xy_to_hex`,
+  `mirek_to_kelvin`, `parse_brightness`); `cogs/common.py` (`is_allowed`, `ConfirmView`,
+  `confirm_if_daytime`, `lights_option` + `lights_autocomplete`, `report_text`, `error_text`,
+  `on_app_command_error`); `cogs/lights.py` (`/on`, `/off`, `/color`, `/brightness`, `/lights`).
+  `bot.py` loads `cogs.lights` and registers the handler with `tree.error`; `cogs/light_toggle.py`
+  deleted. Tests: `test_color.py` (47), `test_replies.py` (16).
+- *Checks:* `ruff check .`, `ruff format --check .` clean; `pytest tests/unit` 116 passed.
+  No model changes, so no `alembic check`.
+- *Deviations:*
+  - **D21 response flow.** The question must be ephemeral and the result public (D22), and
+    Discord makes the first follow-up after a defer take the defer's visibility. So
+    `confirm_if_daytime` runs *before* the interaction is answered: in daytime it reads the bridge
+    (fresh, max 2 s, else `BridgeUnavailable`) and, if a target is off, answers with the ephemeral
+    question; otherwise it defers publicly. The result always goes out with
+    `interaction.followup.send`. Callers resolve names first, so a `NotFound` stays ephemeral.
+  - Buttons **Go ahead** / **Cancel**; 60 s without an answer → "No answer; nothing changed."
+  - Error handler escapes the whole `AuroraHueError` message (markdown + mentions), which closes
+    segment 2's open point. Our own messages therefore can't use markdown (segment 5: D19's
+    `/settings reset-scene` will show its backticks literally; word it without them).
+    Unexpected errors: logged, user sees "Something went wrong; it has been logged."
+  - `report_text(report, verb, suffix)`: one light → its name ("Turned on Desk."), more → a count.
+    D17 lines are ready for segment 5: "Not controllable any more: …" and, since a missing light's
+    name is its UUID, "2 lights aren't on the bridge any more."
+  - `/lights`: one plain line per light ("**Desk** — on, 40%, 2700K"), ephemeral.
+  - An error after the public defer (bridge drops between the name lookup and the write) shows
+    publicly; rare, left as is.
+  - Parallel run: `core/color.py` was finished first and copied byte-identical into segment 4's
+    worktree (`../AuroraHue-s4`), so both branches add the same change.
+- *Open:* does the bridge clamp xy into each bulb's gamut (§3)? Check with `/color #0000ff`.
 
 ---
 

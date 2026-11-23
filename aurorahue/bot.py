@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from aurorahue.cogs.common import on_app_command_error
 from aurorahue.config import Config
 from aurorahue.core.access import LightAccess
 from aurorahue.core.clock import Clock, SystemClock
@@ -19,7 +20,7 @@ from aurorahue.services.lights import LightService
 log = logging.getLogger(__name__)
 
 # Cogs (extensions) loaded on startup. Add new modules here.
-INITIAL_EXTENSIONS: tuple[str, ...] = ("aurorahue.cogs.general", "aurorahue.cogs.light_toggle")
+INITIAL_EXTENSIONS: tuple[str, ...] = ("aurorahue.cogs.general", "aurorahue.cogs.lights")
 
 
 class AuroraHue(commands.Bot):
@@ -49,6 +50,7 @@ class AuroraHue(commands.Bot):
         self.hue_client = HueClient(self.config.hue_bridge_ip, self.config.hue_app_key)
         self.light_service = LightService(self.hue_client, self.light_access, self.clock)
         await self._check_bridge()
+        self.tree.error(on_app_command_error)
 
         for extension in INITIAL_EXTENSIONS:
             await self.load_extension(extension)

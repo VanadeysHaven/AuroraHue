@@ -96,8 +96,8 @@ aurorahue/core/clock.py     Clock protocol, SystemClock (tests: tests/support/cl
 aurorahue/core/errors.py    AuroraHueError(.message) + NotFound, NameTaken, InvalidInput, NotAllowed,
                             BridgeUnavailable
 aurorahue/core/access.py    LightAccess (pydantic, strict): allows(), unknown(), describe()
-aurorahue/core/color.py     Hex, Kelvin, Color, hex_to_xy, kelvin_to_mirek (rest of the brief's
-                            section 3 arrives with the direct light commands)
+aurorahue/core/color.py     Hex, Kelvin, Color, parse_color (InvalidColor), hex_to_xy, xy_to_hex,
+                            kelvin_to_mirek, mirek_to_kelvin, parse_brightness
 aurorahue/services/lights.py  LightService: 60 s light cache, allowed(), resolve(), apply() ->
                             ApplyReport; LightRequest (on, colour, brightness %); every write checks
                             LightAccess again
@@ -105,8 +105,9 @@ aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), sess
                             url.py (DATABASE_URL only, for Alembic), models.py (no tables yet)
 migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…
 aurorahue/cogs/general.py   /ping
-aurorahue/cogs/light_toggle.py  /on /minimum /soft /off on every allowed light via LightService
-                            (no preset), is_allowed() check, daytime ConfirmView; replaced next
+aurorahue/cogs/common.py    is_allowed(), ConfirmView, confirm_if_daytime (D21), lights option +
+                            autocomplete (D6), report_text (D22), the tree error handler
+aurorahue/cogs/lights.py    /on /off /color /brightness [lights], /lights
 aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False): list_lights() -> BridgeLight,
                             apply(id, LightState) (one PUT); HTTP errors -> BridgeUnavailable
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
@@ -145,6 +146,23 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 
 Filled in from the brief's decisions when its segments are done. Until then, the brief is the
 source of truth.
+
+**Light commands** (segment 3 done; all gated by `ALLOWED_USER_IDS`):
+| Command | Does |
+|---|---|
+| `/on [lights]` | switch on, keeping colour and brightness (D7) |
+| `/off [lights]` | switch off; never asks (D7) |
+| `/color color [lights]` | hex (`#ff8800`, `f80`) or temperature (`2700K`, 2000–6500), switches on (D8, D9) |
+| `/brightness percent [lights]` | 0–100, 0 = lowest glow, not off; switches on (D8, D10) |
+| `/lights` | allowed lights with on/off, brightness, colour; ephemeral (D23) |
+
+- `lights`: comma-separated names, autocomplete per D6; empty = all allowed lights.
+- Daytime confirmation (D21) only when a targeted light is off right now (fresh bridge read,
+  2 s limit so Discord's 3 s answer window holds). `confirm_if_daytime` answers the interaction;
+  callers reply with `interaction.followup`.
+- Light changes reply publicly via `report_text` (D22); errors and `/lights` are ephemeral.
+- Errors: one `tree.error` handler (`cogs/common.on_app_command_error`); `AuroraHueError`
+  messages are markdown/mention-escaped as a whole, so they must not rely on markdown.
 
 ---
 
