@@ -23,11 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from aurorahue.db.migrate import upgrade_head
+from aurorahue.services.scenes import SceneService
+from aurorahue.services.settings import SettingsService
 from tests.support.clock import FixedClock
+from tests.support.hue import FakeClient
+from tests.support.services import home_bridge, light_service, session_factory
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-TRUNCATE_TABLES: tuple[str, ...] = ()  # tables arrive in segment 4
+# bot_settings is listed too: TRUNCATE ... CASCADE empties it anyway (it references scenes);
+# committed_sessions puts its one row back afterwards.
+TRUNCATE_TABLES: tuple[str, ...] = ("scene_actions", "scenes", "bot_settings")
 
 
 @pytest.fixture(scope="session")
@@ -112,4 +118,23 @@ async def committed_sessions(
                 await conn.execute(
                     text(f"TRUNCATE {', '.join(TRUNCATE_TABLES)} RESTART IDENTITY CASCADE")
                 )
+                await conn.execute(text("INSERT INTO bot_settings (id) VALUES (1)"))
         await engine.dispose()
+
+
+# --- services on the test session, with a fake bridge ------------------------------------
+
+
+@pytest.fixture
+def fake_bridge() -> FakeClient:
+    return home_bridge()
+
+
+@pytest.fixture
+def scenes(session: AsyncSession, fake_bridge: FakeClient, clock: FixedClock) -> SceneService:
+    return SceneService(session_factory(session), light_service(fake_bridge, clock), clock)
+
+
+@pytest.fixture
+def settings(session: AsyncSession) -> SettingsService:
+    return SettingsService(session_factory(session))
