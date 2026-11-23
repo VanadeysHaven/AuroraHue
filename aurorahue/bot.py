@@ -16,11 +16,18 @@ from aurorahue.core.errors import BridgeUnavailable
 from aurorahue.db.session import create_engine, create_sessionmaker
 from aurorahue.hue.hue_client import HueClient
 from aurorahue.services.lights import LightService
+from aurorahue.services.scenes import SceneService
+from aurorahue.services.settings import SettingsService
 
 log = logging.getLogger(__name__)
 
 # Cogs (extensions) loaded on startup. Add new modules here.
-INITIAL_EXTENSIONS: tuple[str, ...] = ("aurorahue.cogs.general", "aurorahue.cogs.lights")
+INITIAL_EXTENSIONS: tuple[str, ...] = (
+    "aurorahue.cogs.general",
+    "aurorahue.cogs.lights",
+    "aurorahue.cogs.scenes",
+    "aurorahue.cogs.settings",
+)
 
 
 class AuroraHue(commands.Bot):
@@ -35,6 +42,8 @@ class AuroraHue(commands.Bot):
         self.sessionmaker: async_sessionmaker[AsyncSession] | None = None
         self.hue_client: HueClient | None = None
         self.light_service: LightService | None = None
+        self.scene_service: SceneService | None = None
+        self.settings_service: SettingsService | None = None
 
         intents = discord.Intents.default()
 
@@ -49,6 +58,8 @@ class AuroraHue(commands.Bot):
         self.sessionmaker = create_sessionmaker(self.db_engine)
         self.hue_client = HueClient(self.config.hue_bridge_ip, self.config.hue_app_key)
         self.light_service = LightService(self.hue_client, self.light_access, self.clock)
+        self.scene_service = SceneService(self.sessionmaker, self.light_service, self.clock)
+        self.settings_service = SettingsService(self.sessionmaker)
         await self._check_bridge()
         self.tree.error(on_app_command_error)
 

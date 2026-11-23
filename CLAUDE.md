@@ -1,8 +1,8 @@
 # AuroraHue — what Claude Code needs to know
 
 > Written by Claude (Opus 5.5), 2026-11-23. Read this file, then **only** the brief (and the segment)
-> you're working on. Sections marked *(after lights-and-scenes)* describe where the code is going;
-> until that brief is done, the code may not match them yet.
+> you're working on. Finished briefs live in `docs/claude/archive/briefs/` (read one only when a
+> decision's details matter).
 
 AuroraHue is a small Discord bot that controls Philips Hue lights through one Hue bridge on Tim's
 home network: Python 3.12, discord.py, the Hue CLIP v2 API, Docker Compose, deployed with
@@ -89,9 +89,10 @@ aurorahue/config.py         frozen dataclass Config, from .env (python-dotenv); 
                             access file only, no token, for the CLI); load_light_access + ConfigError
 aurorahue/cli.py            `main.py lights`: every bridge light (UUID, name, colour/temperature/
                             dimming, allowed) + access-file IDs not on the bridge
-aurorahue/bot.py            AuroraHue(commands.Bot): DB engine + sessionmaker, HueClient +
-                            LightService (setup_hook; closed in close()), warns about unknown access
-                            IDs at startup, SystemClock, loads cogs, syncs commands
+aurorahue/bot.py            AuroraHue(commands.Bot): DB engine + sessionmaker, HueClient,
+                            LightService, SceneService, SettingsService (setup_hook; closed in
+                            close()), warns about unknown access IDs at startup, SystemClock, loads
+                            cogs, syncs commands
 aurorahue/core/clock.py     Clock protocol, SystemClock (tests: tests/support/clock.py FixedClock)
 aurorahue/core/errors.py    AuroraHueError(.message) + NotFound, NameTaken, InvalidInput, NotAllowed,
                             BridgeUnavailable
@@ -111,19 +112,23 @@ aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), sess
 migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…
 aurorahue/cogs/general.py   /ping
 aurorahue/cogs/common.py    is_allowed(), ConfirmView, confirm_if_daytime (D21), lights option +
-                            autocomplete (D6), report_text (D22), the tree error handler
+                            autocomplete (D6), scene autocomplete, service accessors, report_text
+                            (D22), the tree error handler
 aurorahue/cogs/lights.py    /on /off /color /brightness [lights], /lights
+aurorahue/cogs/scenes.py    /scene list|add|edit|delete|run, /reset; scene list rendering
+aurorahue/cogs/scene_builder.py  SceneBuilder view (D16), ActionForm modal, parse_action, rendering
+aurorahue/cogs/settings.py  /settings [reset-scene] (D18)
 aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False): list_lights() -> BridgeLight,
                             apply(id, LightState) (one PUT); HTTP errors -> BridgeUnavailable
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
 ```
-Tables (migration `0002`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1); the scene
-services aren't wired into the bot yet (segment 5). Tests: `tests/unit` (layering, access file,
-light service with a fake client), `tests/integration` (migrations, scenes and settings services;
+Tables (migration `0002`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1).
+Tests: `tests/unit` (layering, access file, colour, light service with a fake client, reply and
+scene rendering), `tests/integration` (migrations, scenes and settings services;
 fixtures in `conftest.py`, fake bridge in `tests/support/`). New code in `core`/`services`/`hue` uses absolute imports (the layering test only
 sees those).
 
-### Target *(after lights-and-scenes)*
+### Layers
 ```
 cogs/ (discord)  — commands, views, autocomplete, rendering
       |
@@ -148,12 +153,9 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 
 ---
 
-## 4. Domain rules *(after lights-and-scenes)*
+## 4. Domain rules
 
-Filled in from the brief's decisions when its segments are done. Until then, the brief is the
-source of truth.
-
-**Light commands** (segment 3 done; all gated by `ALLOWED_USER_IDS`):
+**Light commands** (all gated by `ALLOWED_USER_IDS`, D20):
 | Command | Does |
 |---|---|
 | `/on [lights]` | switch on, keeping colour and brightness (D7) |
@@ -170,6 +172,25 @@ source of truth.
 - Errors: one `tree.error` handler (`cogs/common.on_app_command_error`); `AuroraHueError`
   messages are markdown/mention-escaped as a whole, so they must not rely on markdown.
 
+**Scenes and settings** (also gated by `ALLOWED_USER_IDS`):
+| Command | Does |
+|---|---|
+| `/scene list [scene]` | names + light count, reset scene ⟲; with `scene`: one line per action, disallowed lights as "(not controllable)" |
+| `/scene add name` / `/scene edit scene [new-name]` | open the scene builder (D16); rename applied on Save |
+| `/scene delete scene` | Delete / Cancel; extra line and the setting cleared if it's the reset scene (D19) |
+| `/scene run scene` · `/reset` | apply the actions (D17); daytime confirmation if an off light goes on (D21) |
+| `/settings [reset-scene]` | show, set, or `none` to clear the reset scene (D18) |
+
+- A scene: unique name (1–50, any case), ≥ 1 action, one per light; an action is on/off + optional
+  colour (hex or Kelvin, stored `#rrggbb` / `2700K`) + optional brightness; "off" takes neither
+  (D13). Global, not per server (D14).
+- Every light in a scene must be allowed **at save time**; running skips lights that are now
+  disallowed or gone and lists them (D17). The builder drops such actions when it opens and says
+  how many, without naming them (D4).
+- Builder: ephemeral, owner-only, in memory until Save (last save wins), 14.5-minute timeout
+  (Discord's interaction token lasts 15). Form errors reply ephemerally; the builder stays open.
+  Selects hold at most 25 lights (Discord's limit).
+
 ---
 
 ## 5. Code conventions
@@ -179,7 +200,7 @@ source of truth.
 - Bot replies set `allowed_mentions=discord.AllowedMentions.none()`; user text (scene names, light
   names) is escaped.
 - Errors meant for users are `AuroraHueError` subclasses with a user-safe `.message`; commands raise,
-  one error handler shows them ephemerally and logs the rest *(after lights-and-scenes)*.
+  one error handler shows them ephemerally and logs the rest.
 - Database code follows Sidequest: SQLAlchemy 2 async + asyncpg, `Base` with a naming convention,
   `expire_on_commit=False`, relationships `lazy="raise"`, services commit their own work.
 - Code comments cite decisions (`D<n>`) from the brief, not segment numbers.
@@ -188,7 +209,32 @@ source of truth.
 
 ## 6. Decisions still in force
 
-None recorded yet. Each finished brief adds its decisions here (ID + one line).
+From `lights-and-scenes` (the archived brief has the details). Each finished brief adds its own.
+
+- **D1** Light access file `configs/lights.json`, read once at startup with pydantic; no command changes it.
+- **D2** Whitelist **or** blacklist (`whitelist` bool); empty `lights` = every light.
+- **D3** No file = all allowed + warning; broken file = refuse to start; unknown IDs = warning.
+- **D4** UUIDs in the file, names in Discord; a disallowed light never shows up in Discord.
+- **D5** Light list from the bridge, cached 60 s; bridge down at startup → bot starts anyway.
+- **D6** `lights` option: comma-separated names, autocomplete appends; empty = all; bad name = error, nothing changes.
+- **D7** `/on` only switches on (keeps colour/brightness); `/off` only switches off.
+- **D8** `/color` and `/brightness` also switch lights on.
+- **D9** One colour field: hex (`#rrggbb`/`rgb`) or Kelvin (`2700K`, 2000–6500); hex → xy, Kelvin → mirek clamped per light.
+- **D10** Brightness 0–100 %; 0 = lowest glow, not off.
+- **D11** A light that can't show the colour still gets on/off + brightness; reply says "colour skipped for".
+- **D12** `/minimum`, `/soft` and their presets are gone.
+- **D13** Scene = unique name (1–50, any case) + at most one action per light (on/off, optional colour, optional brightness).
+- **D14** Scenes are global, in PostgreSQL with Alembic.
+- **D15** `/scene list|add|edit|delete|run` (no bare `/scene`).
+- **D16** Add/edit open an in-memory, owner-only scene builder; 14.5-min timeout; Save needs ≥ 1 action.
+- **D17** Running skips (and lists) disallowed/missing lights; partial failures listed, others still change.
+- **D18** `/settings` holds bot-wide settings in the DB; for now the reset scene.
+- **D19** `/reset` runs the reset scene; deleting it asks with an extra line and clears the setting.
+- **D20** `ALLOWED_USER_IDS` gates every light, scene and settings command; `/ping` is open.
+- **D21** Daytime confirmation for every command that switches an **off** light on (fresh bridge read).
+- **D22** Light changes reply publicly and short; everything else ephemeral; no pings.
+- **D23** `/lights` (allowed lights + state) and `python main.py lights` (every light, UUID, support, allowed).
+- **D24** No `/on` exception light any more.
 
 ---
 

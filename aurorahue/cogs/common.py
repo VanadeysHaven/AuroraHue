@@ -1,5 +1,6 @@
-"""Shared Discord pieces: the user check, the daytime confirmation (D21), the `lights` option
-(D6), reply text for light changes (D22) and the one app-command error handler."""
+"""Shared Discord pieces: the user check, the daytime confirmation (D21), the `lights` and
+`scene` options (D6, §7), reply text for light changes (D22) and the one app-command error
+handler."""
 
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ from discord import app_commands
 from aurorahue.core.errors import AuroraHueError, BridgeUnavailable
 from aurorahue.helpers import sun_finder
 from aurorahue.services.lights import ApplyReport, LightService, Outcome
+from aurorahue.services.scenes import SceneService
+from aurorahue.services.settings import SettingsService
 
 if TYPE_CHECKING:
     from aurorahue.bot import AuroraHue
@@ -40,6 +43,18 @@ def light_service(interaction: discord.Interaction) -> LightService:
     return service
 
 
+def scene_service(interaction: discord.Interaction) -> SceneService:
+    service = bot_of(interaction).scene_service
+    assert service is not None, "set up in AuroraHue.setup_hook"
+    return service
+
+
+def settings_service(interaction: discord.Interaction) -> SettingsService:
+    service = bot_of(interaction).settings_service
+    assert service is not None, "set up in AuroraHue.setup_hook"
+    return service
+
+
 def escape(text: str) -> str:
     """User-visible text from outside the bot (light and scene names): no markdown, no pings."""
     return discord.utils.escape_mentions(discord.utils.escape_markdown(text))
@@ -58,12 +73,20 @@ def is_allowed() -> Callable[[app_commands.T], app_commands.T]:
 
 
 class ConfirmView(discord.ui.View):
-    """Go ahead / Cancel, only for the user who ran the command. `value` stays None on timeout."""
+    """Go ahead / Cancel, only for the user who ran the command. `value` stays None on timeout.
 
-    def __init__(self, caller_id: int) -> None:
+    `confirm_label` and `confirm_text` relabel the button and its "working on it" text
+    (`/scene delete`: "Delete", "Deleting…").
+    """
+
+    def __init__(
+        self, caller_id: int, *, confirm_label: str = "Go ahead", confirm_text: str = "Going ahead…"
+    ) -> None:
         super().__init__(timeout=CONFIRM_TIMEOUT)
         self.caller_id = caller_id
         self.value: bool | None = None
+        self.confirm.label = confirm_label
+        self._confirm_text = confirm_text
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.id == self.caller_id
@@ -71,7 +94,7 @@ class ConfirmView(discord.ui.View):
     @discord.ui.button(label="Go ahead", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.value = True
-        await interaction.response.edit_message(content="Going ahead…", view=None)
+        await interaction.response.edit_message(content=self._confirm_text, view=None)
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
@@ -151,6 +174,25 @@ def lights_option[T](func: T) -> T:
     """The optional `lights` option: description + autocomplete (D6)."""
     func = app_commands.describe(lights=LIGHTS_DESCRIPTION)(func)
     return app_commands.autocomplete(lights=lights_autocomplete)(func)
+
+
+async def scene_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Scene names containing what's typed (any case), prefix hits first, at most 25 (§7)."""
+    scenes = await scene_service(interaction).list_scenes()
+    return [
+        app_commands.Choice(name=name, value=name)
+        for name in match_names([scene.name for scene in scenes], current)
+    ]
+
+
+def match_names(names: list[str], typed: str, limit: int = 25) -> list[str]:
+    """`names` containing `typed` (any case), those starting with it first, at most `limit`."""
+    needle = typed.strip().casefold()
+    hits = [name for name in names if needle in name.casefold()]
+    hits.sort(key=lambda name: not name.casefold().startswith(needle))  # stable: keeps order
+    return hits[:limit]
 
 
 def _join(names: list[str]) -> str:

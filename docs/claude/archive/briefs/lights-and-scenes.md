@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** in progress (segments 1–4 done, 2026-11-23).
+**Status:** done (2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -17,7 +17,7 @@ optional set of lights; `/minimum` and `/soft` go away.
 | 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ✅ done |
 | 3 | Direct light commands | `claude/lights-and-scenes-s3` | ✅ done |
 | 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ✅ done |
-| 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ⬜ todo |
+| 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ✅ done |
 
 Segments 1 and 2 are independent (either order). 3 needs 2. 4 needs 1 (and 2's light registry for
 validation). 5 needs 3 and 4. Legend: ⬜ todo · 🔨 in progress · 👀 waiting for review · ✅ done.
@@ -475,7 +475,7 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 4 — Scenes and settings: schema and services
 
-**Branch:** `claude/lights-and-scenes-s4` · **Status:** 👀 waiting for review · **Migration:** `0002`
+**Branch:** `claude/lights-and-scenes-s4` · **Status:** ✅ done · **Migration:** `0002`
 
 **Checklist**
 1. [x] **Models + migration `0002`** — main session (§5). `alembic revision --rev-id 0002 -m
@@ -541,39 +541,66 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 5 — Scene commands, `/reset`, `/settings`, docs
 
-**Branch:** `claude/lights-and-scenes-s5` · **Status:** ⬜ todo · **Migration:** none
+**Branch:** `claude/lights-and-scenes-s5` · **Status:** ✅ done · **Migration:** none
 
 **Checklist**
-1. [ ] **Scene builder** — main session (`cogs/scene_builder.py`, D16, §7): embed, Set lights… →
+1. [x] **Scene builder** — main session (`cogs/scene_builder.py`, D16, §7): embed, Set lights… →
    form, Remove lights…, Save, Cancel, timeout, owner-only.
-2. [ ] **`cogs/scenes.py`** — main session builds `/scene add` and `/scene edit` (both open the
+2. [x] **`cogs/scenes.py`** — main session builds `/scene add` and `/scene edit` (both open the
    builder) and the `scene` autocomplete; then **Haiku** adds `/scene list`, `/scene delete` (with
    the confirm view from `cogs/common.py`) and `/scene run` (with `confirm_if_daytime`, D21) from the
    existing pattern, reviewed.
-3. [ ] **`/reset` and `/settings`** — Haiku, reviewed, from §7 and D18/D19/D21 (`/reset` confirms
+3. [x] **`/reset` and `/settings`** — Haiku, reviewed, from §7 and D18/D19/D21 (`/reset` confirms
    like `/scene run`) (thin wrappers over the
    services that exist).
-4. [ ] **Render tests** — Haiku, table-driven: `/scene list` lines (with/without reset marker, a
+4. [x] **Render tests** — Haiku, table-driven: `/scene list` lines (with/without reset marker, a
    disallowed light), builder embed lines (on with all fields, on with only brightness, off), name
    escaping.
-5. [ ] **Docs** — Opus: `README.md` (what the bot does, commands, `.env`, `configs/lights.json`,
+5. [x] **Docs** — Opus: `README.md` (what the bot does, commands, `.env`, `configs/lights.json`,
    `python main.py lights`, deploy), `CLAUDE.md` §4 (domain rules) and §6 (D1–D24 one-liners),
    this brief's Status → `done`, then move it to `docs/claude/archive/briefs/`.
-6. [ ] **Checks.**
+6. [x] **Checks.**
 
-**Manual test (Tim)**
-- [ ] `/scene add name:Evening` → builder; set two lights on at `2700K` 40 %, one off; Save →
+**Manual test (Tim):** ✅ (2026-11-23) all passed.
+- [x] `/scene add name:Evening` → builder; set two lights on at `2700K` 40 %, one off; Save →
       `/scene list` shows "Evening (3 lights)"; `/scene list scene:evening` shows the three lines.
-- [ ] `/scene add name:evening` → name taken.
-- [ ] Builder: Save with nothing set → refused; Cancel → "Nothing saved."; wait 15 min → expired text.
-- [ ] Form: colour `#zzz` or `2700` → error, builder stays open; "off" plus a colour → refused.
-- [ ] `/scene edit scene:Evening new-name:Night` → rename + change one light → `/scene run
+- [x] `/scene add name:evening` → name taken.
+- [x] Builder: Save with nothing set → refused; Cancel → "Nothing saved."; wait 15 min → expired text.
+- [x] Form: colour `#zzz` or `2700` → error, builder stays open; "off" plus a colour → refused.
+- [x] `/scene edit scene:Evening new-name:Night` → rename + change one light → `/scene run
       scene:Night` → lights match; lights not in the scene untouched.
-- [ ] Remove a scene light from `lights.json`, restart, `/scene run` → it's skipped and listed.
-- [ ] Daytime: `/scene run` of a scene that switches an off light on → question; a scene with only
+- [x] Remove a scene light from `lights.json`, restart, `/scene run` → it's skipped and listed.
+- [x] Daytime: `/scene run` of a scene that switches an off light on → question; a scene with only
       "off" actions → no question. Same for `/reset`.
-- [ ] `/reset` with nothing set → the hint. `/settings reset-scene:Night` → `/settings` shows it →
+- [x] `/reset` with nothing set → the hint. `/settings reset-scene:Night` → `/settings` shows it →
       `/reset` runs it. `/scene delete scene:Night` → warning line → Delete → `/settings` shows none.
-- [ ] Another user opens your builder's buttons → refused (owner-only).
+- [x] Another user opens your builder's buttons → refused (owner-only).
 
-**Handoff:** —
+**Handoff (2026-11-23, Claude Opus 5.5):**
+- *Built:* `cogs/scene_builder.py` (`SceneBuilder` view, `ActionForm` modal, pure `parse_action`,
+  `action_summary`/`action_line`/`builder_lines`), `cogs/scenes.py` (`/scene list|add|edit|delete|run`,
+  `/reset`, `run_scene`, pure `scene_list_lines`/`scene_detail_lines`), `cogs/settings.py`
+  (`/settings [reset-scene]`). `cogs/common.py`: `scene_service()`/`settings_service()`,
+  `scene_autocomplete` + `match_names`, `ConfirmView` takes `confirm_label`/`confirm_text`.
+  `bot.py` builds `SceneService` and `SettingsService` and loads the two new cogs. Tests:
+  `tests/unit/test_scene_render.py` (28 cases). Docs: `README.md` rewritten, `CLAUDE.md` §3/§4/§6.
+- *Checks:* `ruff check .`, `ruff format --check .` clean; 197 passed (144 unit, 53 integration).
+  No model changes, so no `alembic check`.
+- *Who:* builder, `/scene add`/`edit`, autocomplete and docs in the main session; `/scene list`,
+  `delete`, `run`, `/reset`, `/settings` and the render tests by Haiku from an exact spec, reviewed.
+- *Deviations / choices:*
+  - The form's **State** is a select inside a `ui.Label` (discord.py 2.7.1 supports it); it defaults
+    to **On** when the picked lights don't share one action.
+  - Segment 4's open point: the builder **drops** actions for lights that are no longer allowed (or
+    gone from the bridge) when it opens, and the embed says "Left out N lights the bot can't control
+    any more." without naming them (D4). Saving then removes them from the scene.
+  - Save defers first (the service reads the bridge), then edits the builder message; a save error
+    is an ephemeral follow-up and the builder stays open.
+  - `/scene add` and `/scene edit new-name` check the name up front (`NameTaken`) as well as on Save.
+    `/scene add` refuses when there are no controllable lights.
+  - Run/reset reply: "Ran scene **Evening**. Set 3 lights." plus `report_text`'s skipped/failed parts.
+  - `/scene list scene:…` needs the bridge for light names (`BridgeUnavailable` when it's down);
+    plain `/scene list` doesn't.
+  - Selects show at most 25 lights (Discord's limit); Tim has fewer.
+- *Open:* none. Tim (2026-11-23) accepted the deviations; a scene named "none" not being pickable
+  in `/settings reset-scene` is fine. Manual test passed; brief archived.
