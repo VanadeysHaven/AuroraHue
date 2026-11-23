@@ -2,13 +2,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from aurorahue.core.errors import AuroraHueError
 from aurorahue.helpers import sun_finder
-from aurorahue.hue.hue_client import (
-    MINIMUM_BRIGHTNESS,
-    ON_EXCLUDED_LIGHT_IDS,
-    SOFT_BRIGHTNESS,
-    HueClient,
-)
+from aurorahue.services.lights import LightRequest, LightService
+
+# Kept until these commands go (D12); the old presets are gone, so these are plain percentages.
+MINIMUM_BRIGHTNESS = 0
+SOFT_BRIGHTNESS = 30
 
 
 def is_allowed():
@@ -52,9 +52,16 @@ class LightToggle(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.config = bot.config
-        self.hue_client = HueClient(
-            bridge_ip=self.config.hue_bridge_ip, app_key=self.config.hue_app_key
-        )
+
+    @property
+    def lights(self) -> LightService:
+        service = self.bot.light_service
+        assert service is not None, "set up in AuroraHue.setup_hook"
+        return service
+
+    async def _set_all(self, request: LightRequest) -> None:
+        targets = await self.lights.allowed()
+        await self.lights.apply([light.id for light in targets], request)
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
@@ -66,10 +73,17 @@ class LightToggle(commands.Cog):
             else:
                 await interaction.response.send_message(message, ephemeral=True)
             return
+        original = getattr(error, "original", error)
+        if isinstance(original, AuroraHueError):
+            if interaction.response.is_done():
+                await interaction.followup.send(original.message, ephemeral=True)
+            else:
+                await interaction.response.send_message(original.message, ephemeral=True)
+            return
         raise error
 
     async def _turn_on_gated(
-        self, interaction: discord.Interaction, brightness: float | None, done_message: str
+        self, interaction: discord.Interaction, brightness: int | None, done_message: str
     ) -> None:
         """Turn lights on, asking for confirmation first if it's daytime."""
         await interaction.response.defer(ephemeral=True)
@@ -86,9 +100,7 @@ class LightToggle(commands.Cog):
             if not view.value:
                 return
 
-        await self.hue_client.set_all_lights(
-            on=True, exclude=ON_EXCLUDED_LIGHT_IDS, brightness=brightness
-        )
+        await self._set_all(LightRequest(on=True, brightness=brightness))
         await interaction.followup.send(done_message)
 
     @app_commands.command(name="on", description="Turn all lights on.")
@@ -112,7 +124,7 @@ class LightToggle(commands.Cog):
     @is_allowed()
     async def lights_off(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        await self.hue_client.set_all_lights(on=False)
+        await self._set_all(LightRequest(on=False))
         await interaction.followup.send("Turned lights off!")
 
 

@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** in progress (segment 1 waiting for review, 2026-11-23).
+**Status:** in progress (segments 1 and 2 waiting for review, 2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -14,7 +14,7 @@ optional set of lights; `/minimum` and `/soft` go away.
 | Seg | Title | Branch | Status |
 |---|---|---|---|
 | 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | 👀 waiting for review |
-| 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ⬜ todo |
+| 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | 👀 waiting for review |
 | 3 | Direct light commands | `claude/lights-and-scenes-s3` | ⬜ todo |
 | 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ⬜ todo |
 | 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ⬜ todo |
@@ -316,26 +316,26 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 2 — Light registry and the access file
 
-**Branch:** `claude/lights-and-scenes-s2` · **Status:** ⬜ todo · **Migration:** none
+**Branch:** `claude/lights-and-scenes-s2` · **Status:** 👀 waiting for review · **Migration:** none
 
 **Checklist**
-1. [ ] **`core/errors.py`, `core/access.py`** — main session: errors from §6; `LightAccess` (§2).
-2. [ ] **Loader** — main session: `load_light_access(path) -> LightAccess` per D2/D3 and the startup
+1. [x] **`core/errors.py`, `core/access.py`** — main session: errors from §6; `LightAccess` (§2).
+2. [x] **Loader** — main session: `load_light_access(path) -> LightAccess` per D2/D3 and the startup
    log line (§2). Called from `main.py`; a `ConfigError` exits with the message, no traceback.
-3. [ ] **Access tests** — Haiku, table-driven, `tests/unit/test_access.py`, reviewed. Cases: no file →
+3. [x] **Access tests** — Haiku, table-driven, `tests/unit/test_access.py`, reviewed. Cases: no file →
    all; `{"whitelist": true}`, `{"whitelist": true, "lights": []}` and the same with `false` → all;
    whitelist with 2 IDs → only those; blacklist with 1 ID → all but that; uppercase UUID in the file
    matches the lowercase bridge ID (and the other way round); duplicate IDs fine; refused (each with
    a message naming the field): invalid JSON, `whitelist` missing, `"whitelist": "true"` (string),
    `"whitelist": 1`, a non-UUID string in `lights`, `lights` not a list, an unknown key
    (`"blacklist": true`). Writes the files to `tmp_path`.
-4. [ ] **Hue client** — main session (§4): `list_lights`, `apply`, `BridgeLight`, `LightState`,
+4. [x] **Hue client** — main session (§4): `list_lights`, `apply`, `BridgeLight`, `LightState`,
    `aclose` on shutdown. Delete `LIGHT_IDS`, `ON_EXCLUDED_LIGHT_IDS`, `ON_STATE`,
    `MINIMUM_BRIGHTNESS`, `SOFT_BRIGHTNESS` (the old cog is rewired in segment 3; keep it compiling by
    having it go through `LightService` with the old behaviour minus the preset).
-5. [ ] **`services/lights.py`** — main session (§4): cache, `allowed`, `resolve`, `apply`,
+5. [x] **`services/lights.py`** — main session (§4): cache, `allowed`, `resolve`, `apply`,
    `ApplyReport`.
-6. [ ] **Service tests** — Haiku, reviewed, `tests/unit/test_light_service.py` with a fake client
+6. [x] **Service tests** — Haiku, reviewed, `tests/unit/test_light_service.py` with a fake client
    (no network): `resolve` (none → all allowed; "desk, Hallway" any case; duplicates; unknown name;
    disallowed name reported as unknown, D4); `apply` never sends a PUT for a disallowed ID even if
    passed one; hex on a non-colour light and a temperature on a plain white light → `color_skipped` and the PUT
@@ -343,25 +343,56 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
    light with `mirek_schema` 153–454 → mirek 454; a PUT never holds both `color` and
    `color_temperature`; a failing
    light doesn't stop the others; cache reused within 60 s and refreshed after (FixedClock).
-7. [ ] **CLI** — main session: `python main.py lights` prints a table (UUID, name, colour yes/no,
+7. [x] **CLI** — main session: `python main.py lights` prints a table (UUID, name, colour yes/no,
    allowed yes/no) of every bridge light, then exits; no Discord token needed for it.
-8. [ ] **Example file** — Haiku: `configs/lights.example.json` exactly as §2; `.gitignore` adds
+8. [x] **Example file** — Haiku: `configs/lights.example.json` exactly as §2; `.gitignore` adds
    `configs/lights.json`.
-9. [ ] **Checks**, **Docs** (Opus: `CLAUDE.md` §8, Handoff).
+9. [x] **Checks**, **Docs** (Opus: `CLAUDE.md` §8, Handoff).
 
 **Manual test (Tim)**
-- [ ] `docker compose run --rm bot python main.py lights` → all your lights with IDs.
-- [ ] Create `configs/lights.json` with `"whitelist": true` and today's six lights to keep current
+- [x] `docker compose run --rm bot python main.py lights` → all your lights with IDs.
+- [x] Create `configs/lights.json` with `"whitelist": true` and today's six lights to keep current
       behaviour:
       `8a94b76b-eb9f-42fb-8b58-8c8701a80283`, `0c836d0d-ad3e-4527-802b-b5d0911b7b33`,
       `e8ff6285-fc12-44da-aa8e-c5f98ec167dd`, `0fcfc949-4034-48f3-9f1d-fcba8bd31319`,
       `228a2039-ed8c-4e27-b36d-13db9758db22`, `217d73ed-695a-42f1-bbc1-20cf69c11ae2`.
       Restart → log says "whitelist, 6 lights".
-- [ ] Break the file (`"whitelist": "yes"`, then a typo in a UUID) → bot refuses to start with a
+- [x] Break the file (`"whitelist": "yes"`, then a typo in a UUID) → bot refuses to start with a
       readable error naming the field. Fix it again.
-- [ ] Remove one light from the whitelist, restart, `/on` → that light stays off.
+- [x] Remove one light from the whitelist, restart, `/on` → that light stays off.
+      *All passed (Tim, 2026-11-23).*
 
-**Handoff:** —
+**Handoff (2026-11-23, Opus 5.5):**
+- *Built:* `core/errors.py`, `core/access.py` (`LightAccess` + `unknown()`, `describe()`),
+  `load_light_access` + `ConfigError` + `HueSettings` in `config.py`, `HueClient.list_lights`/`apply`
+  with `BridgeLight`/`LightState` (HTTP errors → `BridgeUnavailable`), `services/lights.py`
+  (`LightService`, `LightRequest`, `Outcome`, `ApplyReport`), `cli.py` + `python main.py lights`,
+  `configs/lights.example.json`, `.gitignore`. The bot builds the client and service in
+  `setup_hook`, closes the client in `close()`, and at startup warns about file IDs not on the bridge
+  (D3) or that the bridge is unreachable (D5, the bot still starts).
+- *Checks:* `ruff check .`, `ruff format --check .` clean; 54 tests passed (21 access, 22 service),
+  integration included (`compose.test.yaml`). No model changes, so no `alembic check`.
+- *Deviations:*
+  - **Part of `core/color.py` pulled forward from segment 3**: `Hex`, `Kelvin`, `Color`,
+    `hex_to_xy`, `kelvin_to_mirek`, exactly per §3. Item 6's tests need hex/Kelvin handling in
+    `apply`. `Hex`/`Kelvin` take already-normalised values and raise `ValueError`; segment 3 adds
+    `parse_color` (with `InvalidColor`), `xy_to_hex`, `mirek_to_kelvin`, `parse_brightness` and the
+    colour tests.
+  - `apply(targets, request)`: targets are light **IDs** (so scenes can pass stored IDs);
+    `request` is one `LightRequest(on, color, brightness)` or a dict ID → request. Colour →
+    `LightState` happens per light inside the service.
+  - Brightness is dropped silently for a light without dimming (on/off plugs); D11 only covers colour.
+  - Two bridge lights with the same name: `resolve` returns both.
+  - The cache holds names, capabilities **and state**, so state can be up to 60 s stale. D21's
+    check and `/lights` should call `allowed(fresh=True)`.
+  - CLI table also shows temperature and dimming (D23), plus file IDs that aren't on the bridge.
+  - Old cog (until segment 3): `/on`, `/off` act on all allowed lights; `/minimum` = brightness 0,
+    `/soft` = 30 % (was half the deleted preset, 29.84). D24: `/on` now also switches on
+    `0c836d0d-…`, which used to be excluded. Per-light failures are ignored there (no report yet);
+    an `AuroraHueError` is shown ephemerally.
+  - New code and the touched `bot.py` use absolute imports (segment 1's open point).
+- *Open:* `NotFound` messages quote user-typed names unescaped (`No light named "x".`); the error
+  handler in segment 3 should escape markdown in user text.
 
 ---
 
