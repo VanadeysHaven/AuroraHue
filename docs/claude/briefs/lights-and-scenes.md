@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** in progress (segments 1 and 2 done; 3 and 4 waiting for review, 2026-11-23).
+**Status:** in progress (segments 1–4 done, 2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -15,8 +15,8 @@ optional set of lights; `/minimum` and `/soft` go away.
 |---|---|---|---|
 | 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | ✅ done |
 | 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ✅ done |
-| 3 | Direct light commands | `claude/lights-and-scenes-s3` | 👀 waiting for review |
-| 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | 👀 waiting for review |
+| 3 | Direct light commands | `claude/lights-and-scenes-s3` | ✅ done |
+| 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ✅ done |
 | 5 | Scene commands, `/reset`, `/settings`, docs | `claude/lights-and-scenes-s5` | ⬜ todo |
 
 Segments 1 and 2 are independent (either order). 3 needs 2. 4 needs 1 (and 2's light registry for
@@ -398,7 +398,7 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 
 ## Segment 3 — Direct light commands
 
-**Branch:** `claude/lights-and-scenes-s3` · **Status:** 👀 waiting for review · **Migration:** none
+**Branch:** `claude/lights-and-scenes-s3` · **Status:** ✅ done · **Migration:** none
 
 **Checklist**
 1. [x] **`core/color.py`** — main session (§3).
@@ -424,20 +424,20 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 6. [x] **Checks**, **Docs** (Opus: `CLAUDE.md` §4 command list, Handoff).
 
 **Manual test (Tim)**
-- [ ] `/minimum` and `/soft` are gone (guild sync: at once; global: up to an hour).
-- [ ] `/on` in daytime → confirm; at night → straight on, with each light's previous colour.
-- [ ] Daytime, all lights on: `/color` and `/brightness` → no question. One light off:
+- [x] `/minimum` and `/soft` are gone (guild sync: at once; global: up to an hour).
+- [x] `/on` in daytime → confirm; at night → straight on, with each light's previous colour.
+- [x] Daytime, all lights on: `/color` and `/brightness` → no question. One light off:
       `/color` → question; Cancel → nothing changes.
-- [ ] `/on lights:` autocomplete shows only allowed lights; pick two → only those switch on.
-- [ ] `/off lights: desk, nonsense` → error naming "nonsense", nothing changed.
-- [ ] `/color color:#ff8800` → all allowed lights on and orange; a white-only bulb (if any) turns on
+- [x] `/on lights:` autocomplete shows only allowed lights; pick two → only those switch on.
+- [x] `/off lights: desk, nonsense` → error naming "nonsense", nothing changed.
+- [x] `/color color:#ff8800` → all allowed lights on and orange; a white-only bulb (if any) turns on
       and the reply says its colour was skipped.
-- [ ] `/color color:2200k` → warm white on colour and white-ambiance bulbs; `/lights` shows
+- [x] `/color color:2200k` → warm white on colour and white-ambiance bulbs; `/lights` shows
       "2200K" for them. `/color color:2700` → error suggesting `2700K`; `/color color:9000K` → refused.
-- [ ] `/brightness percent:0` → lowest glow, not off. `/brightness percent:100 lights:<one>`.
-- [ ] Unplug a bulb, `/on` → others go on, reply names the one that didn't answer.
-- [ ] `/lights` lists allowed lights with their state.
-- [ ] Someone not in `ALLOWED_USER_IDS` → "You are not allowed to use this command."
+- [x] `/brightness percent:0` → lowest glow, not off. `/brightness percent:100 lights:<one>`.
+- [x] Unplug a bulb, `/on` → others go on, reply names the one that didn't answer.
+- [x] `/lights` lists allowed lights with their state.
+- [x] Someone not in `ALLOWED_USER_IDS` → "You are not allowed to use this command."
 
 **Handoff** (Claude, Opus 5.5, 2026-11-23)
 - *Built:* the rest of `core/color.py` (`parse_color` + `InvalidColor(InvalidInput)`, `xy_to_hex`,
@@ -468,7 +468,8 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
     publicly; rare, left as is.
   - Parallel run: `core/color.py` was finished first and copied byte-identical into segment 4's
     worktree (`../AuroraHue-s4`), so both branches add the same change.
-- *Open:* does the bridge clamp xy into each bulb's gamut (§3)? Check with `/color #0000ff`.
+- *Open:* none. Manual test passed (2026-11-23), incl. `/color #0000ff`: the bridge clamps xy
+  into each bulb's gamut, so no client-side clamping.
 
 ---
 
@@ -493,7 +494,7 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
    and brightness 101 written directly; migration up/down/up. Update the TRUNCATE list in conftest.
 4. [x] **Checks**, **Docs** (Opus: Handoff; `CLAUDE.md` §3 package map).
 
-**Manual test (Tim):** `bash update.sh` → migration `0002` applied, bot starts. (No commands yet.)
+**Manual test (Tim):** ✅ (2026-11-23) `bash update.sh` → migration `0002` applied, bot starts. (No commands yet.)
 
 **Handoff (2026-11-23, Claude Opus 5.5; built in a local worktree in parallel with segment 3):**
 - *Built:* `db/models.py` (`Scene`, `SceneAction`, `BotSettings`; checks named `ck_scenes_name_length`,
