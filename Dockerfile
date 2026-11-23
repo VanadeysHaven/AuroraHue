@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application.
 COPY main.py ./
 COPY aurorahue ./aurorahue
+COPY alembic.ini ./
+COPY migrations ./migrations
 
 # Run as a non-root user.
 RUN useradd --create-home --uid 1000 app \

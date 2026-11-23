@@ -28,3 +28,6 @@ env/
 
 # Dev-only deps
 requirements-dev.txt
+
+# Runtime config (mounted read-only by docker-compose.yml, never baked in)
+configs/

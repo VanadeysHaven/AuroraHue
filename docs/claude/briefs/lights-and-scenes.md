@@ -1,6 +1,6 @@
 # Brief — Light access file, scenes, and the new light commands
 
-**Status:** ready (Tim's answers in §9, 2026-11-23).
+**Status:** in progress (segment 1 waiting for review, 2026-11-23).
 **Slug:** `lights-and-scenes` · **Migrations:** `0001` (empty base), `0002` (scenes + settings)
 Written by Claude (Opus 5.5), 2026-11-23.
 
@@ -13,7 +13,7 @@ optional set of lights; `/minimum` and `/soft` go away.
 
 | Seg | Title | Branch | Status |
 |---|---|---|---|
-| 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | ⬜ todo |
+| 1 | Database foundation (Postgres, Alembic, tests) | `claude/lights-and-scenes-s1` | 👀 waiting for review |
 | 2 | Light registry and the access file | `claude/lights-and-scenes-s2` | ⬜ todo |
 | 3 | Direct light commands | `claude/lights-and-scenes-s3` | ⬜ todo |
 | 4 | Scenes and settings: schema and services | `claude/lights-and-scenes-s4` | ⬜ todo |
@@ -238,32 +238,32 @@ Nothing open.
 
 ## Segment 1 — Database foundation
 
-**Branch:** `claude/lights-and-scenes-s1` · **Status:** ⬜ todo · **Migration:** `0001` (empty)
+**Branch:** `claude/lights-and-scenes-s1` · **Status:** 👀 waiting for review · **Migration:** `0001` (empty)
 
 Bring Sidequest's database setup to AuroraHue, with no tables yet, plus a test harness (AuroraHue has
 no tests today). Reference files in the Sidequest repo are named per item; port them, don't redesign.
 
 **Checklist**
-1. [ ] **Dependencies** — main session: add `sqlalchemy[asyncio]>=2`, `asyncpg`, `alembic`,
+1. [x] **Dependencies** — main session: add `sqlalchemy[asyncio]>=2`, `asyncpg`, `alembic`,
    `pydantic>=2` to `dependencies`; `pytest`, `pytest-asyncio` to `dev`. Recompile both requirement files with
    `pip-compile --no-emit-index-url` (`requirements-dev.txt` is stale today: it lacks `astral` and
    `httpx2`). Add a `scripts/compile-requirements.sh` like Sidequest's.
-2. [ ] **Config** — main session: `Config` gets `database_url` (`DATABASE_URL`, required),
+2. [x] **Config** — main session: `Config` gets `database_url` (`DATABASE_URL`, required),
    `run_migrations` (`RUN_MIGRATIONS`, default true) and `lights_config` (`LIGHTS_CONFIG`, default
    `configs/lights.json`, used in segment 2). Add `aurorahue/db/url.py: database_url() -> str` that
    reads only `DATABASE_URL` (after `load_dotenv()`), so Alembic runs without a bot token.
-3. [ ] **DB package** — Haiku, port from Sidequest, reviewed: `aurorahue/db/base.py` (naming
+3. [x] **DB package** — Haiku, port from Sidequest, reviewed: `aurorahue/db/base.py` (naming
    convention, TIMESTAMPTZ map), `session.py`, `migrate.py` (`alembic_config`, `upgrade_head`);
    `aurorahue/db/models.py` empty for now (imports `Base`).
-4. [ ] **Alembic** — Haiku, port, reviewed: `alembic.ini` (`prepend_sys_path = .`,
+4. [x] **Alembic** — Haiku, port, reviewed: `alembic.ini` (`prepend_sys_path = .`,
    `file_template = %%(rev)s_%%(slug)s`), `migrations/env.py` (async, URL from
    `config.attributes["database_url"]` else `db.url.database_url()`), `script.py.mako`,
    `migrations/versions/0001_initial.py` (empty).
-5. [ ] **Start-up** — main session: `main.py` runs `upgrade_head` **before** `bot.run` when
+5. [x] **Start-up** — main session: `main.py` runs `upgrade_head` **before** `bot.run` when
    `run_migrations` is true (it's sync and env.py calls `asyncio.run`, so not inside the event
    loop); the bot gets an engine + sessionmaker in `setup_hook`, disposed in `close()`. Port
    `core/clock.py` (`Clock`, `SystemClock`).
-6. [ ] **Docker** — Haiku, from this spec, reviewed: in `docker-compose.yml` enable a `db` service
+6. [x] **Docker** — Haiku, from this spec, reviewed: in `docker-compose.yml` enable a `db` service
    `postgres:17-alpine`, container `aurorahue-db`, `env_file: .env`, volume `aurorahue-db-data`,
    healthcheck `pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB`; bot gets `depends_on: db:
    service_healthy`, `init: true`, and `volumes: ["./configs:/app/configs:ro"]`. `Dockerfile` also
@@ -271,17 +271,17 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
    `POSTGRES_USER=aurorahue`, `POSTGRES_PASSWORD=change-me`, `POSTGRES_DB=aurorahue`,
    `DATABASE_URL=postgresql+asyncpg://aurorahue:change-me@db:5432/aurorahue`, `RUN_MIGRATIONS=true`,
    `LIGHTS_CONFIG=configs/lights.json`, with comments like Sidequest's.
-7. [ ] **update.sh** — Haiku, reviewed: gzip backups and abort-on-failed-backup like Sidequest's
+7. [x] **update.sh** — Haiku, reviewed: gzip backups and abort-on-failed-backup like Sidequest's
    (`backups/backup-<time>.sql.gz`, keep 14). No other changes.
-8. [ ] **Test harness** — Haiku, port, reviewed: `compose.test.yaml` (container
+8. [x] **Test harness** — Haiku, port, reviewed: `compose.test.yaml` (container
    `aurorahue-db-test`, user/password `aurorahue`, db `aurorahue_test`, port **55433** so it can run
    next to Sidequest's), `tests/integration/conftest.py` (same fixtures, `_test` guard, TRUNCATE list
    empty for now), `tests/integration/test_migrations.py` (up/down/up round trip),
    `tests/support/clock.py`, `tests/unit/test_layering.py` with the rules from `CLAUDE.md` §3
    (`core` ⊄ discord/sqlalchemy/httpx2; `services`, `db`, `hue` ⊄ discord). `[tool.pytest.ini_options]`
    `asyncio_mode = "auto"`.
-9. [ ] **Checks** — Haiku runs §7 checks of `CLAUDE.md`, including integration with Docker.
-10. [ ] **Docs** — Opus: `CLAUDE.md` §3/§7/§8 match what was built; Handoff below.
+9. [x] **Checks** — Haiku runs §7 checks of `CLAUDE.md`, including integration with Docker.
+10. [x] **Docs** — Opus: `CLAUDE.md` §3/§7/§8 match what was built; Handoff below.
 
 **Manual test (Tim)**
 - [ ] Copy the new `.env.example` lines into `.env` (same password in `POSTGRES_PASSWORD` and
@@ -289,7 +289,28 @@ no tests today). Reference files in the Sidequest repo are named per item; port 
 - [ ] `bash update.sh` on the Pi → `aurorahue-db` healthy, bot log shows the migration, bot online,
       `/ping` and `/on` still work. Second run → a `backups/backup-*.sql.gz` appears.
 
-**Handoff:** —
+**Handoff (2026-11-23, Opus 5.5):**
+- *Built:* items 1–10 as specified. Postgres 17 `db` service, Alembic (empty `0001`), migrations
+  run in `main.py` before `bot.run`, the bot opens an engine/sessionmaker in `setup_hook` and
+  disposes it in `close()`, `core/clock.py`, test harness (`compose.test.yaml` on 55433,
+  `tests/integration` fixtures, migration round trip, layering test), gzip backups in `update.sh`.
+- *Checks:* `ruff check .` and `ruff format --check .` clean; 11 tests passed, 0 skipped, with the
+  integration tests run against `compose.test.yaml`; `alembic upgrade head` + `alembic check` clean.
+- *Deviations:*
+  - `requirements-dev.txt` pins were aligned to `requirements.txt` (httpx2 2.12.0, httpcore2,
+    anyio, truststore); a fresh dev compile had picked httpx2 2.16.2. Production pins unchanged.
+  - `ruff` failed on three files this segment doesn't otherwise touch (`cogs/light_toggle.py`,
+    `helpers/sun_finder.py`, `hue/hue_client.py`): fixed mechanically (import order, quotes,
+    `timezone.utc` → `UTC`, one long f-string split into a variable). No behaviour change.
+  - Layering test: `core` also may not import `aurorahue.db` / `aurorahue.hue` (as in Sidequest,
+    which forbids `sidequest.db` in core). `RUN_MIGRATIONS` accepts true/false/1/0/yes/no/on/off.
+  - `update.sh` gained `set -o pipefail` (needed to notice a failed `pg_dump`) and dropped
+    `docker exec -t` (a TTY corrupts the dump). The rest of its flow is unchanged.
+  - The bot also gets `self.clock = SystemClock()` for the services in segment 4.
+- *Open:* the layering test (like Sidequest's) only sees absolute imports; existing code uses
+  relative ones (`from ..db import …`), which it would miss. Use absolute imports in
+  `core`/`services`/`db`/`hue`, or extend the test in a later segment.
+- *Note:* running the bot locally now needs `DATABASE_URL` in `.env` (see `CLAUDE.md` §7).
 
 ---
 

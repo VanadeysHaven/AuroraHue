@@ -82,16 +82,22 @@ runs in subagents.
 
 ### Today
 ```
-main.py                     logging + Config.from_env() + bot.run
+main.py                     logging + Config.from_env() + Alembic upgrade head (RUN_MIGRATIONS) + bot.run
 aurorahue/config.py         frozen dataclass Config, from .env (python-dotenv)
-aurorahue/bot.py            AuroraHue(commands.Bot): loads cogs, syncs commands (GUILD_IDS or global)
+aurorahue/bot.py            AuroraHue(commands.Bot): DB engine + sessionmaker (setup_hook, disposed in
+                            close()), SystemClock, loads cogs, syncs commands (GUILD_IDS or global)
+aurorahue/core/clock.py     Clock protocol, SystemClock (tests: tests/support/clock.py FixedClock)
+aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), session.py, migrate.py,
+                            url.py (DATABASE_URL only, for Alembic), models.py (no tables yet)
+migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…
 aurorahue/cogs/general.py   /ping
 aurorahue/cogs/light_toggle.py  /on /minimum /soft /off, is_allowed() check, daytime ConfirmView
 aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False); hard-coded LIGHT_IDS,
                             ON_EXCLUDED_LIGHT_IDS, ON_STATE preset
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
 ```
-No database, no tests yet.
+No tables yet (scenes and settings arrive in segment 4). Tests: `tests/unit` (layering),
+`tests/integration` (migration round trip, fixtures in `conftest.py`).
 
 ### Target *(after lights-and-scenes)*
 ```
@@ -149,19 +155,25 @@ None recorded yet. Each finished brief adds its decisions here (ID + one line).
 
 - `ruff check .` and `ruff format --check .`
 - `pytest tests/unit`
-- Integration tests need the test Postgres *(after segment 1 of lights-and-scenes)*:
+- Integration tests need the test Postgres:
   `docker compose -f compose.test.yaml up -d`, then
   `TEST_DATABASE_URL=postgresql+asyncpg://aurorahue:aurorahue@localhost:55433/aurorahue_test pytest`.
   Without the variable they skip with a message. If Docker isn't available, say so; never fake it.
 - After model changes: `alembic check`.
 - Local dev: `.venv` with Python 3.12 (`py -3.12 -m venv .venv`, `pip install -r requirements-dev.txt`,
-  `pip install --no-deps -e .`).
+  `pip install --no-deps -e .`). Running the bot locally needs `DATABASE_URL` set; it must be reachable
+  (e.g. the test Postgres) unless `RUN_MIGRATIONS=false`, since the engine connects lazily.
+- Requirements: `bash scripts/compile-requirements.sh` (pip-compile in a `python:3.12-slim`
+  container, so pins match the image). Then `pip install -r requirements-dev.txt` in `.venv`.
 - Don't build the Docker image to "verify" (Tim's rule). Claude can't use Discord or reach the Hue
   bridge: every segment that touches either ends with a **manual test checklist** for Tim.
 
 ## 8. Operating the bot
 
-- Secrets and settings: `.env` (template `.env.example`). Light access: `configs/lights.json`
+- Secrets and settings: `.env` (template `.env.example`), also read by the `db` service
+  (`POSTGRES_*`; the password is only used when the `aurorahue-db-data` volume is first created). Light access: `configs/lights.json`
   (template `configs/lights.example.json`), mounted read-only into the container.
-- Deploy: `bash update.sh` (`--skip-db` skips the backup). Backups land in `backups/`.
+- Deploy: `bash update.sh` (`--skip-db` skips the backup). Backups land in
+  `backups/backup-<time>.sql.gz` (newest 14 kept); a failed backup aborts the update.
+- Migrations run on bot start (`RUN_MIGRATIONS=true`).
 - After editing `configs/lights.json`: `docker compose restart bot`.

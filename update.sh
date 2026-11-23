@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# So a failed pg_dump in the backup pipeline is noticed.
+set -o pipefail
+
+KEEP_BACKUPS=14
+
 echo "Setting up..."
 mkdir backups -p
 mkdir configs -p
@@ -30,7 +35,20 @@ else
   if [ "$database_state" == "true" ];
   then
     echo "Backing up database..."
-    docker exec -t aurorahue-db sh -c 'exec pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}"' > backups/backup-"$time_file".sql
+    backup_file="backups/backup-$time_file.sql.gz"
+    if ! docker exec aurorahue-db sh -c 'exec pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}"' | gzip > "$backup_file.tmp"; then
+      rm -f -- "$backup_file.tmp"
+      echo "Error: database backup failed. Aborting update before touching the running containers." >&2
+      exit 1
+    fi
+    mv -- "$backup_file.tmp" "$backup_file"
+    echo "Backup saved to $backup_file"
+
+    # Keep only the newest $KEEP_BACKUPS backups. "|| true" covers the no-matches case,
+    # where ls fails and pipefail would otherwise abort the script.
+    ls -1t backups/backup-*.sql.gz 2>/dev/null | tail -n +"$((KEEP_BACKUPS + 1))" | xargs -r rm -- || true
+  else
+    echo "Database container not running, skipping backup"
   fi
 fi
 

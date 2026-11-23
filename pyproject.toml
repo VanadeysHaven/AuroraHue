@@ -6,15 +6,21 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
+    "alembic",
     "astral>=3.2",
+    "asyncpg",
     "discord.py>=2.4",
     "httpx2>=2.12",
+    "pydantic>=2",
     "python-dotenv>=1.0",
+    "sqlalchemy[asyncio]>=2",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pip-tools>=7.4",
+    "pytest",
+    "pytest-asyncio",
     "ruff>=0.6",
 ]
 
@@ -37,3 +43,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aurorahue", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]  # so tests can import shared helpers from tests.support

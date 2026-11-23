@@ -6,6 +6,9 @@ import logging
 
 from aurorahue.bot import run
 from aurorahue.config import Config
+from aurorahue.db.migrate import upgrade_head
+
+log = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -15,6 +18,10 @@ def main() -> None:
     )
 
     config = Config.from_env()
+    if config.run_migrations:
+        # Before bot.run: Alembic's env.py calls asyncio.run, which can't run inside the bot's loop.
+        log.info("Running database migrations")
+        upgrade_head(config.database_url)
     run(config)
 
 

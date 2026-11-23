@@ -4,10 +4,10 @@ from discord.ext import commands
 
 from aurorahue.helpers import sun_finder
 from aurorahue.hue.hue_client import (
-    HueClient,
     MINIMUM_BRIGHTNESS,
     ON_EXCLUDED_LIGHT_IDS,
     SOFT_BRIGHTNESS,
+    HueClient,
 )
 
 
@@ -52,7 +52,9 @@ class LightToggle(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.config = bot.config
-        self.hue_client = HueClient(bridge_ip=self.config.hue_bridge_ip, app_key=self.config.hue_app_key)
+        self.hue_client = HueClient(
+            bridge_ip=self.config.hue_bridge_ip, app_key=self.config.hue_app_key
+        )
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
@@ -74,9 +76,11 @@ class LightToggle(commands.Cog):
 
         if sun_finder.is_daytime(self.config):
             view = ConfirmView(interaction.user.id)
+            sun_phase = sun_finder.get_sun_phase_message(self.config)
             await interaction.followup.send(
-                f"It's daytime - {sun_finder.get_sun_phase_message(self.config)} Turn the lights on?",
-                view=view, ephemeral=True,
+                f"It's daytime - {sun_phase} Turn the lights on?",
+                view=view,
+                ephemeral=True,
             )
             await view.wait()
             if not view.value:
@@ -95,7 +99,9 @@ class LightToggle(commands.Cog):
     @app_commands.command(name="minimum", description="Turn all lights on at minimum brightness.")
     @is_allowed()
     async def lights_minimum(self, interaction: discord.Interaction):
-        await self._turn_on_gated(interaction, MINIMUM_BRIGHTNESS, "Set lights to minimum brightness!")
+        await self._turn_on_gated(
+            interaction, MINIMUM_BRIGHTNESS, "Set lights to minimum brightness!"
+        )
 
     @app_commands.command(name="soft", description="Turn all lights on at half brightness.")
     @is_allowed()
