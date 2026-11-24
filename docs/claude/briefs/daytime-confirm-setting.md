@@ -1,6 +1,6 @@
 # Brief — Daytime confirmation as a setting
 
-**Status:** ready
+**Status:** waiting for review
 **Slug:** `daytime-confirm-setting` · **Migration:** `0003` (`bot_settings.daytime_confirm`)
 Written by Claude (Opus 5.5), 2026-11-24.
 
@@ -12,7 +12,7 @@ Written by Claude (Opus 5.5), 2026-11-24.
 
 | Seg | Title | Branch | Status |
 |---|---|---|---|
-| 1 | Setting, migration, `/settings` option, docs | `claude/daytime-confirm-setting-s1` | ⬜ todo |
+| 1 | Setting, migration, `/settings` option, docs | `claude/daytime-confirm-setting-s1` | 👀 waiting for review |
 
 Legend: ⬜ todo · 🔨 in progress · 👀 waiting for review · ✅ done.
 
@@ -92,16 +92,16 @@ Unit: `settings_text` for the four on/off × scene/none combinations, if the hel
 
 ## Segment 1 — Setting, migration, `/settings` option, docs
 
-**Branch:** `claude/daytime-confirm-setting-s1` · **Status:** ⬜ todo
+**Branch:** `claude/daytime-confirm-setting-s1` · **Status:** 👀 waiting for review
 
-1. [ ] Model column + migration `0003_daytime_confirm.py` (main session); `alembic check`.
-2. [ ] `SettingsService`: outer join, `daytime_confirm` in the view, `set_daytime_confirm` (main session).
-3. [ ] `confirm_if_daytime` checks the setting first (D25) (main session).
-4. [ ] `/settings daytime-confirm` option and reply text (D26) (main session).
-5. [ ] Tests from §3 (Haiku from the case tables, reviewed).
-6. [ ] Docs: `CLAUDE.md` (architecture: migration `0003`, `/settings` row, D21 amended, D25–D27
+1. [x] Model column + migration `0003_daytime_confirm.py` (main session); `alembic check`.
+2. [x] `SettingsService`: outer join, `daytime_confirm` in the view, `set_daytime_confirm` (main session).
+3. [x] `confirm_if_daytime` checks the setting first (D25) (main session).
+4. [x] `/settings daytime-confirm` option and reply text (D26) (main session).
+5. [x] Tests from §3 (Haiku from the case tables, reviewed).
+6. [x] Docs: `CLAUDE.md` (architecture: migration `0003`, `/settings` row, D21 amended, D25–D27
        added), `README.md` (`/settings` row, the "Daytime check" bullet says it's off by default).
-7. [ ] Checks (§7 of `CLAUDE.md`), including integration tests if Docker is available.
+7. [x] Checks (§7 of `CLAUDE.md`), including integration tests if Docker is available.
 
 **Manual test checklist (Tim, after deploy):**
 - [ ] `/settings` shows `Daytime confirmation: off`.
@@ -110,4 +110,20 @@ Unit: `settings_text` for the four on/off × scene/none combinations, if the hel
 - [ ] `/settings daytime-confirm:off reset-scene:<scene>`: both change in one reply.
 - [ ] `/reset` and `/scene run` in daylight with the setting off: no question.
 
-**Handoff:** —
+**Handoff** (2026-11-24):
+- Built: `BotSettings.daytime_confirm` + migration `0003_daytime_confirm.py`; `SettingsService`
+  outer-joins the scene, returns `daytime_confirm`, `set_daytime_confirm()`; both setters share one
+  `_upsert` helper. `confirm_if_daytime` checks the setting before the sun and the bridge.
+  `/settings daytime-confirm:on|off` with `settings_text()` in `cogs/settings.py`.
+- Checks: `ruff check`/`format --check` clean; `pytest tests/unit` 148 passed; full `pytest` with
+  the test Postgres 207 passed; `alembic check`: no new operations.
+- Deviations:
+  - The reset-scene "set" sentence is now "Reset scene set; `/reset` runs it." (it was
+    "Reset scene: **X**. `/reset` runs it."), because the settings lines below already name it.
+  - `test_migration_0002.py` now ends at `head` instead of `0002`: the migrated database is shared by
+    the whole test session, and stopping at `0002` left later tests without the new column.
+  - Tests were written in the main session, not by Haiku (eight short cases; reviewing a
+    subagent diff would have cost more).
+  - The "no reset scene, daytime_confirm on" regression case is covered by
+    `test_switch_daytime_confirm_on_and_off` rather than a separate test.
+- Open questions: none.

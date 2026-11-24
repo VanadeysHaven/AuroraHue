@@ -104,25 +104,26 @@ aurorahue/services/lights.py  LightService: 60 s light cache, allowed(), resolve
                             LightAccess again
 aurorahue/services/scenes.py  SceneService (sessions, LightService, clock): list/get/get_by_id/
                             create/update/delete/actions_for_run/run; validates on save (D13)
-aurorahue/services/settings.py  SettingsService: get_settings(), set_reset_scene() (D18, D19)
+aurorahue/services/settings.py  SettingsService: get_settings(), set_reset_scene(),
+                            set_daytime_confirm() (D18, D19, D25)
 aurorahue/services/model.py StrictModel (frozen, strict pydantic), SessionFactory
 aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), session.py, migrate.py,
                             url.py (DATABASE_URL only, for Alembic), models.py (Scene, SceneAction,
                             BotSettings)
-migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…
+migrations/                 Alembic (async env.py); revisions named 0001_initial.py, 0002_…, 0003_…
 aurorahue/cogs/general.py   /ping
-aurorahue/cogs/common.py    is_allowed(), ConfirmView, confirm_if_daytime (D21), lights option +
+aurorahue/cogs/common.py    is_allowed(), ConfirmView, confirm_if_daytime (D21, D25), lights option +
                             autocomplete (D6), scene autocomplete, service accessors, report_text
                             (D22), the tree error handler
 aurorahue/cogs/lights.py    /on /off /color /brightness [lights], /lights
 aurorahue/cogs/scenes.py    /scene list|add|edit|delete|run, /reset; scene list rendering
 aurorahue/cogs/scene_builder.py  SceneBuilder view (D16), ActionForm modal, parse_action, rendering
-aurorahue/cogs/settings.py  /settings [reset-scene] (D18)
+aurorahue/cogs/settings.py  /settings [reset-scene] [daytime-confirm] (D18, D26)
 aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False): list_lights() -> BridgeLight,
                             apply(id, LightState) (one PUT); HTTP errors -> BridgeUnavailable
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
 ```
-Tables (migration `0002`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1).
+Tables (migrations `0002`, `0003`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1).
 Tests: `tests/unit` (layering, access file, colour, light service with a fake client, reply and
 scene rendering), `tests/integration` (migrations, scenes and settings services;
 fixtures in `conftest.py`, fake bridge in `tests/support/`). New code in `core`/`services`/`hue` uses absolute imports (the layering test only
@@ -165,7 +166,8 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 | `/lights` | allowed lights with on/off, brightness, colour; ephemeral (D23) |
 
 - `lights`: comma-separated names, autocomplete per D6; empty = all allowed lights.
-- Daytime confirmation (D21) only when a targeted light is off right now (fresh bridge read,
+- Daytime confirmation (D21) only when the setting is on (D25, default off), it's daytime and a
+  targeted light is off right now (fresh bridge read,
   2 s limit so Discord's 3 s answer window holds). `confirm_if_daytime` answers the interaction;
   callers reply with `interaction.followup`.
 - Light changes reply publicly via `report_text` (D22); errors and `/lights` are ephemeral.
@@ -179,7 +181,7 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 | `/scene add name` / `/scene edit scene [new-name]` | open the scene builder (D16); rename applied on Save |
 | `/scene delete scene` | Delete / Cancel; extra line and the setting cleared if it's the reset scene (D19) |
 | `/scene run scene` · `/reset` | apply the actions (D17); daytime confirmation if an off light goes on (D21) |
-| `/settings [reset-scene]` | show, set, or `none` to clear the reset scene (D18) |
+| `/settings [reset-scene] [daytime-confirm]` | show; set or `none` to clear the reset scene (D18); daytime confirmation `on`/`off` (D25, D26) |
 
 - A scene: unique name (1–50, any case), ≥ 1 action, one per light; an action is on/off + optional
   colour (hex or Kelvin, stored `#rrggbb` / `2700K`) + optional brightness; "off" takes neither
@@ -228,13 +230,21 @@ From `lights-and-scenes` (the archived brief has the details). Each finished bri
 - **D15** `/scene list|add|edit|delete|run` (no bare `/scene`).
 - **D16** Add/edit open an in-memory, owner-only scene builder; 14.5-min timeout; Save needs ≥ 1 action.
 - **D17** Running skips (and lists) disallowed/missing lights; partial failures listed, others still change.
-- **D18** `/settings` holds bot-wide settings in the DB; for now the reset scene.
+- **D18** `/settings` holds bot-wide settings in the DB: the reset scene and the daytime confirmation.
 - **D19** `/reset` runs the reset scene; deleting it asks with an extra line and clears the setting.
 - **D20** `ALLOWED_USER_IDS` gates every light, scene and settings command; `/ping` is open.
-- **D21** Daytime confirmation for every command that switches an **off** light on (fresh bridge read).
+- **D21** Daytime confirmation for every command that switches an **off** light on (fresh bridge read),
+  when the setting is on (D25).
 - **D22** Light changes reply publicly and short; everything else ephemeral; no pings.
 - **D23** `/lights` (allowed lights + state) and `python main.py lights` (every light, UUID, support, allowed).
 - **D24** No `/on` exception light any more.
+
+From `daytime-confirm-setting`:
+
+- **D25** The daytime confirmation is a setting (`bot_settings.daytime_confirm`), **off by default**;
+  off = never ask.
+- **D26** `/settings daytime-confirm:on|off`; can be combined with `reset-scene`; `/settings` shows both.
+- **D27** The sun check, `astral` and `LATITUDE`/`LONGITUDE` stay (needed when D25 is on).
 
 ---
 

@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -91,3 +92,5 @@ class BotSettings(Base):
     reset_scene_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("scenes.id", ondelete="SET NULL")
     )
+    # D25: ask before switching lights on in daytime (D21); off by default.
+    daytime_confirm: Mapped[bool] = mapped_column(Boolean, server_default=false())

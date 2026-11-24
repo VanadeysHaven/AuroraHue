@@ -1,11 +1,14 @@
-"""Reply text for light changes (`report_text`) and app-command errors (`error_text`)."""
+"""Reply text for light changes (`report_text`), app-command errors (`error_text`) and
+`/settings` (`settings_text`)."""
 
 import pytest
 from discord import app_commands
 
 from aurorahue.cogs.common import error_text, report_text
+from aurorahue.cogs.settings import settings_text
 from aurorahue.core.errors import BridgeUnavailable, NotFound
 from aurorahue.services.lights import ApplyReport, LightResult, Outcome
+from aurorahue.services.settings import SettingsView
 
 OK = Outcome.OK
 COLOR_SKIPPED = Outcome.COLOR_SKIPPED
@@ -123,3 +126,22 @@ def test_report_text_breaks_mentions() -> None:
 )
 def test_error_text(error: Exception, expected: str | None) -> None:
     assert error_text(error) == expected
+
+
+@pytest.mark.parametrize(
+    ("view", "expected"),
+    [
+        (SettingsView(), "Reset scene: none\nDaytime confirmation: off"),
+        (SettingsView(daytime_confirm=True), "Reset scene: none\nDaytime confirmation: on"),
+        (
+            SettingsView(reset_scene_id=1, reset_scene_name="Evening"),
+            "Reset scene: **Evening**\nDaytime confirmation: off",
+        ),
+        (
+            SettingsView(reset_scene_id=1, reset_scene_name="*Night*", daytime_confirm=True),
+            "Reset scene: **\*Night\***\nDaytime confirmation: on",
+        ),
+    ],
+)
+def test_settings_text(view: SettingsView, expected: str) -> None:
+    assert settings_text(view) == expected

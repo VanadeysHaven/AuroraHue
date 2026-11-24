@@ -42,6 +42,6 @@ def test_0002_up_down_up(migrated_database: str) -> None:
     assert _tables(migrated_database) == set()
     assert _rows(migrated_database, "SELECT version_num FROM alembic_version") == [("0001",)]
 
-    command.upgrade(cfg, "0002")
+    command.upgrade(cfg, "head")  # the database is shared by the whole test session
     assert _tables(migrated_database) == TABLES
     assert _rows(migrated_database, "SELECT id, reset_scene_id FROM bot_settings") == [(1, None)]

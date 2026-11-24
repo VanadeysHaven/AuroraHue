@@ -1,4 +1,4 @@
-"""Shared Discord pieces: the user check, the daytime confirmation (D21), the `lights` and
+"""Shared Discord pieces: the user check, the daytime confirmation (D21, D25), the `lights` and
 `scene` options (D6, §7), reply text for light changes (D22) and the one app-command error
 handler."""
 
@@ -107,15 +107,20 @@ class ConfirmView(discord.ui.View):
 async def confirm_if_daytime(
     interaction: discord.Interaction, switching_on: Collection[str]
 ) -> bool:
-    """D21: in daytime, ask before switching on a light (ID in `switching_on`) that is off right
-    now (fresh bridge read). Returns whether to go ahead.
+    """D21: when the daytime confirmation is on (D25) and it's daytime, ask before switching on a
+    light (ID in `switching_on`) that is off right now (fresh bridge read). Returns whether to go
+    ahead.
 
     Call it before answering the interaction. When it returns True the interaction is answered
     (the ephemeral question, or a public defer), so send the result with `interaction.followup`;
     a follow-up after the question is a new, public message (D22).
     """
     bot = bot_of(interaction)
-    if switching_on and sun_finder.is_daytime(bot.config):
+    if (
+        switching_on
+        and (await settings_service(interaction).get_settings()).daytime_confirm
+        and sun_finder.is_daytime(bot.config)
+    ):
         try:
             async with asyncio.timeout(FRESH_READ_TIMEOUT):
                 lights = await light_service(interaction).allowed(fresh=True)

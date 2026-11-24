@@ -21,12 +21,12 @@ Only users listed in `ALLOWED_USER_IDS` can use these (empty = everyone). `/ping
 | `/scene delete scene` | Delete a scene (asks first). |
 | `/scene run scene` | Run a scene. |
 | `/reset` | Run the reset scene. |
-| `/settings [reset-scene]` | Show the settings, or pick the reset scene (`none` clears it). |
+| `/settings [reset-scene] [daytime-confirm]` | Show the settings, pick the reset scene (`none` clears it), or switch the daytime check `on`/`off`. |
 
 - **`lights`** is a comma-separated list of light names; autocomplete offers them one after another.
   Leave it empty for all lights.
-- **Daytime check:** between sunrise and sunset (±30 minutes) the bot asks before switching on a
-  light that is off right now.
+- **Daytime check** (off by default, `/settings daytime-confirm:on`): between sunrise and sunset
+  (±30 minutes) the bot asks before switching on a light that is off right now.
 - Light changes reply publicly ("Turned on 3 lights."); lists, the scene editor, settings and errors
   only show to you.
 

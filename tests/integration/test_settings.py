@@ -1,4 +1,5 @@
-"""SettingsService against PostgreSQL: the reset scene (D18, D19)."""
+"""SettingsService against PostgreSQL: the reset scene (D18, D19) and the daytime confirmation
+(D25)."""
 
 import pytest
 from sqlalchemy import text
@@ -66,3 +67,47 @@ async def test_db_allows_only_row_1(session: AsyncSession) -> None:
     with pytest.raises(IntegrityError):
         async with session.begin_nested():
             await session.execute(text("INSERT INTO bot_settings (id) VALUES (2)"))
+
+
+async def test_daytime_confirm_off_after_migration(settings: SettingsService) -> None:
+    assert (await settings.get_settings()).daytime_confirm is False
+
+
+async def test_switch_daytime_confirm_on_and_off(settings: SettingsService) -> None:
+    assert await settings.set_daytime_confirm(True) == SettingsView(daytime_confirm=True)
+    assert await settings.get_settings() == SettingsView(daytime_confirm=True)
+
+    assert await settings.set_daytime_confirm(False) == SettingsView()
+    assert await settings.get_settings() == SettingsView()
+
+
+async def test_daytime_confirm_keeps_the_reset_scene(
+    settings: SettingsService, scenes: SceneService
+) -> None:
+    scene_id = await make_scene(scenes, "Evening")
+    await settings.set_reset_scene(scene_id)
+
+    view = await settings.set_daytime_confirm(True)
+
+    assert view == SettingsView(
+        reset_scene_id=scene_id, reset_scene_name="Evening", daytime_confirm=True
+    )
+
+
+async def test_reset_scene_keeps_daytime_confirm(
+    settings: SettingsService, scenes: SceneService
+) -> None:
+    scene_id = await make_scene(scenes, "Evening")
+    await settings.set_daytime_confirm(True)
+
+    view = await settings.set_reset_scene(scene_id)
+
+    assert view.daytime_confirm is True
+
+
+async def test_daytime_confirm_works_without_the_row(
+    session: AsyncSession, settings: SettingsService
+) -> None:
+    await session.execute(text("DELETE FROM bot_settings"))
+
+    assert await settings.set_daytime_confirm(True) == SettingsView(daytime_confirm=True)

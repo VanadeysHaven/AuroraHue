@@ -1,7 +1,9 @@
-"""Bot-wide settings (D18). For now one: the reset scene that `/reset` runs (D19)."""
+"""Bot-wide settings (D18): the reset scene that `/reset` runs (D19) and the daytime
+confirmation (D25)."""
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from aurorahue.core.errors import NotFound
 from aurorahue.db.models import SETTINGS_ROW_ID, BotSettings, Scene
@@ -11,6 +13,7 @@ from aurorahue.services.model import SessionFactory, StrictModel
 class SettingsView(StrictModel):
     reset_scene_id: int | None = None
     reset_scene_name: str | None = None
+    daytime_confirm: bool = False
 
 
 class SettingsService:
@@ -21,26 +24,38 @@ class SettingsService:
         async with self._sessions() as session:
             row = (
                 await session.execute(
-                    select(Scene.id, Scene.name)
+                    select(Scene.id, Scene.name, BotSettings.daytime_confirm)
                     .select_from(BotSettings)
-                    .join(Scene, Scene.id == BotSettings.reset_scene_id)
+                    .outerjoin(Scene, Scene.id == BotSettings.reset_scene_id)
                     .where(BotSettings.id == SETTINGS_ROW_ID)
                 )
             ).first()
             if row is None:
                 return SettingsView()
-            return SettingsView(reset_scene_id=row.id, reset_scene_name=row.name)
+            return SettingsView(
+                reset_scene_id=row.id,
+                reset_scene_name=row.name,
+                daytime_confirm=row.daytime_confirm,
+            )
 
     async def set_reset_scene(self, scene_id: int | None) -> SettingsView:
         """Set (or with None, clear) the reset scene. Raises `NotFound` for a deleted scene."""
         async with self._sessions() as session:
             if scene_id is not None and await session.get(Scene, scene_id) is None:
                 raise NotFound("That scene doesn't exist any more.")
-            # Upsert: migration 0002 inserts the row, but don't depend on it still being there.
-            stmt = insert(BotSettings).values(id=SETTINGS_ROW_ID, reset_scene_id=scene_id)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[BotSettings.id], set_={"reset_scene_id": scene_id}
-            )
-            await session.execute(stmt)
-            await session.commit()
+            await self._upsert(session, reset_scene_id=scene_id)
         return await self.get_settings()
+
+    async def set_daytime_confirm(self, enabled: bool) -> SettingsView:
+        """D25: switch the daytime confirmation (D21) on or off."""
+        async with self._sessions() as session:
+            await self._upsert(session, daytime_confirm=enabled)
+        return await self.get_settings()
+
+    @staticmethod
+    async def _upsert(session: AsyncSession, **values: object) -> None:
+        # Migration 0002 inserts the row, but don't depend on it still being there.
+        stmt = insert(BotSettings).values(id=SETTINGS_ROW_ID, **values)
+        stmt = stmt.on_conflict_do_update(index_elements=[BotSettings.id], set_=values)
+        await session.execute(stmt)
+        await session.commit()
