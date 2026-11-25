@@ -1,4 +1,4 @@
-"""Direct light commands: /on, /off, /color, /brightness (D7, D8) and /lights (D23)."""
+"""Direct light commands: /on, /off, /color, /brightness (D7, D28, D31, D35) and /lights (D23)."""
 
 import discord
 from discord import app_commands
@@ -12,10 +12,11 @@ from aurorahue.cogs.common import (
     light_service,
     lights_option,
     report_text,
+    settings_service,
 )
 from aurorahue.core.color import mirek_to_kelvin, parse_brightness, parse_color, xy_to_hex
 from aurorahue.hue.hue_client import BridgeLight
-from aurorahue.services.lights import LightRequest
+from aurorahue.services.lights import LightRequest, on_targets
 
 
 class Lights(commands.Cog):
@@ -27,7 +28,12 @@ class Lights(commands.Cog):
     @is_allowed()
     async def on(self, interaction: discord.Interaction, lights: str | None = None) -> None:
         service = light_service(interaction)
-        ids = [light.id for light in await service.resolve(lights)]
+        found = await service.resolve(lights)
+        if is_bare(lights):  # D31, D33: leave the excluded lights alone, without saying so
+            settings = await settings_service(interaction).get_settings()
+            ids = on_targets(found, settings.on_exclude)
+        else:
+            ids = [light.id for light in found]
         if not await confirm_if_daytime(interaction, ids):
             return
         report = await service.apply(ids, LightRequest(on=True))
@@ -47,7 +53,7 @@ class Lights(commands.Cog):
             report_text(report, "Turned off"), allowed_mentions=NO_MENTIONS
         )
 
-    @app_commands.command(name="color", description="Set a colour and switch the lights on.")
+    @app_commands.command(name="color", description="Set the colour of lights that are on.")
     @app_commands.describe(color="Hex like #ff8800 or white temperature like 2700K")
     @lights_option
     @is_allowed()
@@ -57,15 +63,15 @@ class Lights(commands.Cog):
         wanted = parse_color(color)
         service = light_service(interaction)
         ids = [light.id for light in await service.resolve(lights)]
-        if not await confirm_if_daytime(interaction, ids):
-            return
-        report = await service.apply(ids, LightRequest(on=True, color=wanted))
+        # D28, D30, D35: never switches a light on, so no daytime question; off lights queue.
+        await interaction.response.defer(thinking=True)
+        report = await service.apply(ids, LightRequest(on=None, color=wanted), fresh=True)
         await interaction.followup.send(
             report_text(report, "Set", f" to {wanted}"), allowed_mentions=NO_MENTIONS
         )
 
     @app_commands.command(
-        name="brightness", description="Set the brightness and switch the lights on."
+        name="brightness", description="Set the brightness of lights that are on."
     )
     @app_commands.describe(percent="0-100; 0 is the lowest glow, not off")
     @lights_option
@@ -79,9 +85,8 @@ class Lights(commands.Cog):
         level = parse_brightness(percent)
         service = light_service(interaction)
         ids = [light.id for light in await service.resolve(lights)]
-        if not await confirm_if_daytime(interaction, ids):
-            return
-        report = await service.apply(ids, LightRequest(on=True, brightness=level))
+        await interaction.response.defer(thinking=True)
+        report = await service.apply(ids, LightRequest(on=None, brightness=level), fresh=True)
         await interaction.followup.send(
             report_text(report, "Set", f" to {level}% brightness"), allowed_mentions=NO_MENTIONS
         )
@@ -93,6 +98,11 @@ class Lights(commands.Cog):
         allowed = await light_service(interaction).allowed(fresh=True)
         text = "\n".join(_light_line(light) for light in allowed) or "No lights to control."
         await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+
+def is_bare(lights: str | None) -> bool:
+    """No light named: empty, or only spaces and commas (`resolve` reads that as every light)."""
+    return not (lights or "").replace(",", " ").strip()
 
 
 def _light_line(light: BridgeLight) -> str:

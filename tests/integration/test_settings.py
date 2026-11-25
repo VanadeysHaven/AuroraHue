@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aurorahue.core.errors import NotFound
 from aurorahue.services.scenes import ActionInput, SceneInput, SceneService
 from aurorahue.services.settings import SettingsService, SettingsView
-from tests.support.services import DESK_ID
+from tests.support.services import DESK_ID, HALLWAY_ID
 
 
 async def make_scene(scenes: SceneService, name: str) -> int:
@@ -111,3 +111,43 @@ async def test_daytime_confirm_works_without_the_row(
     await session.execute(text("DELETE FROM bot_settings"))
 
     assert await settings.set_daytime_confirm(True) == SettingsView(daytime_confirm=True)
+
+
+async def test_on_exclude_empty_after_migration(settings: SettingsService) -> None:
+    assert (await settings.get_settings()).on_exclude == ()
+
+
+async def test_set_on_exclude_deduplicates_and_sorts(settings: SettingsService) -> None:
+    view = await settings.set_on_exclude([HALLWAY_ID, DESK_ID, DESK_ID])
+
+    assert view.on_exclude == tuple(sorted([DESK_ID, HALLWAY_ID]))
+    assert (await settings.get_settings()).on_exclude == view.on_exclude
+
+
+async def test_clear_on_exclude(settings: SettingsService) -> None:
+    await settings.set_on_exclude([DESK_ID])
+
+    assert (await settings.set_on_exclude([])).on_exclude == ()
+
+
+async def test_on_exclude_keeps_the_other_settings(
+    settings: SettingsService, scenes: SceneService
+) -> None:
+    scene_id = await make_scene(scenes, "Evening")
+    await settings.set_reset_scene(scene_id)
+    await settings.set_daytime_confirm(True)
+
+    view = await settings.set_on_exclude([DESK_ID])
+
+    assert view == SettingsView(
+        reset_scene_id=scene_id,
+        reset_scene_name="Evening",
+        daytime_confirm=True,
+        on_exclude=(DESK_ID,),
+    )
+
+
+async def test_other_settings_keep_on_exclude(settings: SettingsService) -> None:
+    await settings.set_on_exclude([DESK_ID])
+
+    assert (await settings.set_daytime_confirm(True)).on_exclude == (DESK_ID,)

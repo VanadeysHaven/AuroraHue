@@ -10,10 +10,10 @@ Only users listed in `ALLOWED_USER_IDS` can use these (empty = everyone). `/ping
 
 | Command | What it does |
 |---|---|
-| `/on [lights]` | Switch lights on; they keep their colour and brightness. |
+| `/on [lights]` | Switch lights on; they keep their colour and brightness. Without `lights`, the lights in `/settings on-exclude` stay off. |
 | `/off [lights]` | Switch lights off. |
-| `/color color [lights]` | Set a colour and switch the lights on. `color` is a hex colour (`#ff8800`, `f80`) or a white temperature (`2700K`, 2000–6500). |
-| `/brightness percent [lights]` | Set brightness 0–100 and switch the lights on. 0 is the lowest glow, not off. |
+| `/color color [lights]` | Set the colour of the lights that are on. Lights that are off stay off and get the colour the next time the bot switches them on (within 30 minutes). `color` is a hex colour (`#ff8800`, `f80`) or a white temperature (`2700K`, 2000–6500). |
+| `/brightness percent [lights]` | Set brightness 0–100 of the lights that are on. Lights that are off stay off and get it the next time the bot switches them on (within 30 minutes). 0 is the lowest glow, not off. |
 | `/lights` | The lights the bot controls, with their state (only you see it). |
 | `/scene list [scene]` | All scenes, or one scene's lights. The reset scene is marked ⟲. |
 | `/scene add name` | Create a scene in the scene editor. |
@@ -21,7 +21,7 @@ Only users listed in `ALLOWED_USER_IDS` can use these (empty = everyone). `/ping
 | `/scene delete scene` | Delete a scene (asks first). |
 | `/scene run scene` | Run a scene. |
 | `/reset` | Run the reset scene. |
-| `/settings [reset-scene] [daytime-confirm]` | Show the settings, pick the reset scene (`none` clears it), or switch the daytime check `on`/`off`. |
+| `/settings [reset-scene] [daytime-confirm] [on-exclude]` | Show the settings, pick the reset scene (`none` clears it), switch the daytime check `on`/`off`, or set the lights `/on` without lights leaves alone (comma-separated names; `none` clears). |
 
 - **`lights`** is a comma-separated list of light names; autocomplete offers them one after another.
   Leave it empty for all lights.

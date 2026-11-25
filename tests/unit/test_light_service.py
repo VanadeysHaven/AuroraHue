@@ -3,7 +3,7 @@
 The bridge is replaced by `FakeClient`, so nothing here touches the network.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -12,9 +12,9 @@ import pytest
 
 from aurorahue.core.access import LightAccess
 from aurorahue.core.color import Color, Hex, Kelvin
-from aurorahue.core.errors import BridgeUnavailable, NotFound
+from aurorahue.core.errors import BridgeUnavailable, InvalidInput, NotFound
 from aurorahue.hue.hue_client import BridgeLight, LightState
-from aurorahue.services.lights import LightRequest, LightService, Outcome
+from aurorahue.services.lights import LightRequest, LightService, Outcome, on_targets
 from tests.support.clock import FixedClock
 
 DESK_ID = "0c9f5a1e-1111-4a3b-8c2d-000000000001"
@@ -285,3 +285,256 @@ async def test_fresh_allowed_always_fetches(env: Env) -> None:
     await env.service.allowed(fresh=True)
 
     assert env.client.list_calls == 3
+
+
+# lights that are on change now; off lights queue (D28, D35-D38)
+
+
+def switch_off(env: Env, *light_ids: str) -> None:
+    env.client.lights = [
+        replace(light, on=False) if light.id in light_ids else light for light in env.client.lights
+    ]
+
+
+def switch_on(env: Env, *light_ids: str) -> None:
+    env.client.lights = [
+        replace(light, on=True) if light.id in light_ids else light for light in env.client.lights
+    ]
+
+
+def test_request_keeping_on_off_needs_colour_or_brightness() -> None:
+    with pytest.raises(ValueError):
+        LightRequest(on=None)
+
+
+def test_state_keeping_on_off_leaves_on_out_of_payload() -> None:
+    assert LightState(on=None, brightness=50.0).to_payload() == {"dimming": {"brightness": 50.0}}
+
+
+async def test_keep_on_off_changes_a_light_that_is_on_without_on(env: Env) -> None:
+    report = await env.service.apply([DESK_ID], LightRequest(on=None, color=Hex("#ff8800")))
+
+    assert report.results[0].outcome is Outcome.OK
+    payload = env.payloads()[DESK_ID]
+    assert "on" not in payload
+    assert "xy" in payload["color"]
+
+
+async def test_keep_on_off_queues_for_a_light_that_is_off(env: Env) -> None:
+    switch_off(env, DESK_ID)
+
+    report = await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    assert report.results[0].outcome is Outcome.QUEUED
+    assert report.changed == 0
+    assert env.client.puts == []
+
+
+async def test_keep_on_off_mixed_changes_the_lit_light_and_queues_the_other(env: Env) -> None:
+    switch_off(env, HALLWAY_ID)
+
+    report = await env.service.apply([DESK_ID, HALLWAY_ID], LightRequest(on=None, brightness=30))
+
+    outcomes = {result.light_id: result.outcome for result in report.results}
+    assert outcomes == {DESK_ID: Outcome.OK, HALLWAY_ID: Outcome.QUEUED}
+    assert [light_id for light_id, _ in env.client.puts] == [DESK_ID]
+    assert report.changed == 1
+
+
+async def test_keep_on_off_colour_the_light_cannot_show_is_still_skipped(env: Env) -> None:
+    report = await env.service.apply([HALLWAY_ID], LightRequest(on=None, color=Hex("#ff8800")))
+
+    assert report.results[0].outcome is Outcome.COLOR_SKIPPED
+
+
+async def test_switching_on_still_switches_off_lights_on(env: Env) -> None:
+    switch_off(env, DESK_ID)
+
+    report = await env.service.apply([DESK_ID], LightRequest(on=True, brightness=30))
+
+    assert report.results[0].outcome is Outcome.OK
+    assert env.payloads()[DESK_ID]["on"] == {"on": True}
+
+
+async def test_off_light_with_nothing_it_can_show_queues_nothing(env: Env) -> None:
+    switch_off(env, PORCH_ID)
+
+    report = await env.service.apply([PORCH_ID], LightRequest(on=None, color=Hex("#ff8800")))
+    await env.service.apply([PORCH_ID], LightRequest(on=True))
+
+    assert report.results[0].outcome is Outcome.COLOR_SKIPPED
+    assert env.payloads()[PORCH_ID] == {"on": {"on": True}}
+
+
+async def test_fresh_apply_reads_the_bridge(env: Env) -> None:
+    await env.service.allowed()
+    switch_off(env, DESK_ID)
+
+    report = await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30), fresh=True)
+
+    assert report.results[0].outcome is Outcome.QUEUED
+    assert env.client.list_calls == 2
+
+
+async def test_switching_on_sends_the_queued_change(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, color=Hex("#ff8800")))
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    payload = env.payloads()[DESK_ID]
+    assert payload["on"] == {"on": True}
+    assert "xy" in payload["color"]
+    assert payload["dimming"] == {"brightness": 30.0}
+
+
+async def test_newer_queued_value_replaces_the_older(env: Env) -> None:
+    switch_off(env, HALLWAY_ID)
+    await env.service.apply([HALLWAY_ID], LightRequest(on=None, color=Kelvin(2700)))
+    await env.service.apply([HALLWAY_ID], LightRequest(on=None, color=Kelvin(2000)))
+
+    await env.service.apply([HALLWAY_ID], LightRequest(on=True))
+
+    assert env.payloads()[HALLWAY_ID]["color_temperature"] == {"mirek": 454}
+
+
+async def test_queued_change_is_used_once(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.client.puts[-1] == (DESK_ID, {"on": {"on": True}})
+
+
+async def test_queued_change_expires_after_thirty_minutes(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    env.clock.advance(timedelta(minutes=30))
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.payloads()[DESK_ID] == {"on": {"on": True}}
+
+
+async def test_queued_change_kept_just_under_thirty_minutes(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    env.clock.advance(timedelta(minutes=29, seconds=59))
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.payloads()[DESK_ID]["dimming"] == {"brightness": 30.0}
+
+
+async def test_newer_queue_starts_the_thirty_minutes_again(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+    env.clock.advance(timedelta(minutes=20))
+    await env.service.apply([DESK_ID], LightRequest(on=None, color=Hex("#ff8800")))
+
+    env.clock.advance(timedelta(minutes=20))
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    payload = env.payloads()[DESK_ID]
+    assert payload["dimming"] == {"brightness": 30.0}
+    assert "xy" in payload["color"]
+
+
+async def test_request_values_win_over_the_queue(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, color=Hex("#ff8800"), brightness=30))
+
+    await env.service.apply([DESK_ID], LightRequest(on=True, color=Kelvin(2700)))
+
+    payload = env.payloads()[DESK_ID]
+    assert payload["color_temperature"] == {"mirek": 370}
+    assert "color" not in payload
+    assert payload["dimming"] == {"brightness": 30.0}
+
+
+async def test_switching_off_keeps_the_queue(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    await env.service.apply([DESK_ID], LightRequest(on=False))
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.payloads()[DESK_ID]["dimming"] == {"brightness": 30.0}
+
+
+async def test_change_while_on_drops_the_queue(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+    switch_on(env, DESK_ID)  # e.g. with the Hue app
+
+    await env.service.apply([DESK_ID], LightRequest(on=None, color=Hex("#ff8800")), fresh=True)
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.payloads()[DESK_ID] == {"on": {"on": True}}
+
+
+async def test_failed_switch_on_keeps_the_queue(env: Env) -> None:
+    switch_off(env, DESK_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+    env.client.failing = {DESK_ID}
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    env.client.failing = set()
+    await env.service.apply([DESK_ID], LightRequest(on=True))
+
+    assert env.payloads()[DESK_ID]["dimming"] == {"brightness": 30.0}
+
+
+async def test_queue_is_per_light(env: Env) -> None:
+    switch_off(env, DESK_ID, HALLWAY_ID)
+    await env.service.apply([DESK_ID], LightRequest(on=None, brightness=30))
+
+    await env.service.apply([DESK_ID, HALLWAY_ID], LightRequest(on=True))
+
+    payloads = env.payloads()
+    assert payloads[DESK_ID]["dimming"] == {"brightness": 30.0}
+    assert payloads[HALLWAY_ID] == {"on": {"on": True}}
+
+
+# on_targets (D31, D33, D34)
+
+
+def test_on_targets_without_exclusions_is_every_light() -> None:
+    lights = make_env().client.lights
+
+    assert on_targets(lights, ()) == [light.id for light in lights]
+
+
+def test_on_targets_leaves_out_excluded_lights() -> None:
+    lights = make_env().client.lights
+
+    assert on_targets(lights, {DESK_ID, PORCH_ID}) == [HALLWAY_ID, GARAGE_ID]
+
+
+def test_on_targets_ignores_excluded_ids_that_are_not_lights() -> None:
+    lights = make_env().client.lights[:2]
+
+    assert on_targets(lights, {UNKNOWN_ID}) == [DESK_ID, HALLWAY_ID]
+
+
+def test_on_targets_with_every_light_excluded_raises() -> None:
+    lights = make_env().client.lights[:2]
+
+    with pytest.raises(InvalidInput) as info:
+        on_targets(lights, [DESK_ID, HALLWAY_ID])
+
+    assert "Every light is excluded" in info.value.message
+
+
+def test_on_targets_with_no_lights_is_empty() -> None:
+    assert on_targets([], [DESK_ID]) == []
+
+
+async def test_keep_on_off_with_nothing_the_light_can_do_sends_nothing(env: Env) -> None:
+    report = await env.service.apply([PORCH_ID], LightRequest(on=None, color=Hex("#ff8800")))
+
+    assert report.results[0].outcome is Outcome.COLOR_SKIPPED
+    assert env.client.puts == []

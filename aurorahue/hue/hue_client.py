@@ -30,9 +30,10 @@ class BridgeLight:
 
 @dataclass(frozen=True)
 class LightState:
-    """What to send to one light. Fields left as None are left out of the request."""
+    """What to send to one light. Fields left as None are left out of the request; `on=None`
+    keeps the light on or off as it is (D28)."""
 
-    on: bool
+    on: bool | None
     xy: tuple[float, float] | None = None
     mirek: int | None = None
     brightness: float | None = None
@@ -42,7 +43,9 @@ class LightState:
             raise ValueError("a light state holds either xy or mirek, not both")
 
     def to_payload(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"on": {"on": self.on}}
+        payload: dict[str, Any] = {}
+        if self.on is not None:
+            payload["on"] = {"on": self.on}
         if self.brightness is not None:
             payload["dimming"] = {"brightness": self.brightness}
         if self.xy is not None:

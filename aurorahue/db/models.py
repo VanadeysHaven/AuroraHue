@@ -22,6 +22,7 @@ from sqlalchemy import (
     false,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aurorahue.db.base import Base
@@ -94,3 +95,5 @@ class BotSettings(Base):
     )
     # D25: ask before switching lights on in daytime (D21); off by default.
     daytime_confirm: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    # D31: CLIP v2 light UUIDs that /on without lights leaves alone (Text, like scene_actions).
+    on_exclude: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))

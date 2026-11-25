@@ -5,7 +5,8 @@ import pytest
 from discord import app_commands
 
 from aurorahue.cogs.common import error_text, report_text
-from aurorahue.cogs.settings import settings_text
+from aurorahue.cogs.lights import is_bare
+from aurorahue.cogs.settings import excluded_text, settings_text
 from aurorahue.core.errors import BridgeUnavailable, NotFound
 from aurorahue.services.lights import ApplyReport, LightResult, Outcome
 from aurorahue.services.settings import SettingsView
@@ -15,6 +16,8 @@ COLOR_SKIPPED = Outcome.COLOR_SKIPPED
 FAILED = Outcome.FAILED
 NOT_ALLOWED = Outcome.NOT_ALLOWED
 MISSING = Outcome.MISSING
+QUEUED = Outcome.QUEUED
+LIGHT_NAMES = {"id-desk": "Desk", "id-hall": "Hallway", "id-star": "*Star*"}
 
 
 def report(*results: tuple[str, Outcome]) -> ApplyReport:
@@ -52,6 +55,20 @@ def wrapped(original: Exception) -> app_commands.CommandInvokeError:
             " to #ff8800",
             "Set 2 lights to #ff8800. Colour skipped for: Hallway.",
             id="colour-skipped",
+        ),
+        pytest.param(
+            [("Desk", OK), ("Hall", QUEUED), ("Lamp", QUEUED)],
+            "Set",
+            " to 30% brightness",
+            "Set Desk to 30% brightness. Queued until switched on (30 min): Hall, Lamp.",
+            id="some-queued",
+        ),
+        pytest.param(
+            [("Hall", QUEUED)],
+            "Set",
+            " to #ff8800",
+            "Queued until switched on (30 min): Hall.",
+            id="all-queued",
         ),
         pytest.param(
             [("Desk", OK), ("Hall", OK), ("Lamp", FAILED)],
@@ -131,17 +148,54 @@ def test_error_text(error: Exception, expected: str | None) -> None:
 @pytest.mark.parametrize(
     ("view", "expected"),
     [
-        (SettingsView(), "Reset scene: none\nDaytime confirmation: off"),
-        (SettingsView(daytime_confirm=True), "Reset scene: none\nDaytime confirmation: on"),
+        (SettingsView(), "Reset scene: none\nDaytime confirmation: off\nExcluded from /on: none"),
+        (
+            SettingsView(daytime_confirm=True),
+            "Reset scene: none\nDaytime confirmation: on\nExcluded from /on: none",
+        ),
         (
             SettingsView(reset_scene_id=1, reset_scene_name="Evening"),
-            "Reset scene: **Evening**\nDaytime confirmation: off",
+            "Reset scene: **Evening**\nDaytime confirmation: off\nExcluded from /on: none",
         ),
         (
             SettingsView(reset_scene_id=1, reset_scene_name="*Night*", daytime_confirm=True),
-            "Reset scene: **\*Night\***\nDaytime confirmation: on",
+            "Reset scene: **\*Night\***\nDaytime confirmation: on\nExcluded from /on: none",
+        ),
+        (
+            SettingsView(on_exclude=("id-hall", "id-desk")),
+            "Reset scene: none\nDaytime confirmation: off\nExcluded from /on: Desk, Hallway",
         ),
     ],
 )
 def test_settings_text(view: SettingsView, expected: str) -> None:
-    assert settings_text(view) == expected
+    assert settings_text(view, LIGHT_NAMES) == expected
+
+
+@pytest.mark.parametrize(
+    ("excluded", "names", "expected"),
+    [
+        pytest.param((), LIGHT_NAMES, "none", id="none"),
+        pytest.param(("id-desk", "id-hall"), LIGHT_NAMES, "Desk, Hallway", id="sorted"),
+        pytest.param(("id-star",), LIGHT_NAMES, "\\*Star\\*", id="escaped"),
+        pytest.param(
+            ("id-desk", "id-gone"), LIGHT_NAMES, "Desk (+1 not controllable)", id="one-hidden"
+        ),
+        pytest.param(("id-gone",), LIGHT_NAMES, "none (+1 not controllable)", id="only-hidden"),
+        pytest.param(("id-desk",), None, "1 light (bridge unreachable)", id="bridge-down-one"),
+        pytest.param(
+            ("id-desk", "id-hall"), None, "2 lights (bridge unreachable)", id="bridge-down-two"
+        ),
+    ],
+)
+def test_excluded_text(
+    excluded: tuple[str, ...], names: dict[str, str] | None, expected: str
+) -> None:
+    assert excluded_text(excluded, names) == expected
+
+
+@pytest.mark.parametrize(
+    ("lights", "bare"),
+    [(None, True), ("", True), (" , ,", True), ("Desk", False), (" desk, ", False)],
+)
+def test_is_bare(lights: str | None, bare: bool) -> None:
+    assert is_bare(lights) is bare

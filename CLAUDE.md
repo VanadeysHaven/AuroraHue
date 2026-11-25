@@ -99,13 +99,16 @@ aurorahue/core/errors.py    AuroraHueError(.message) + NotFound, NameTaken, Inva
 aurorahue/core/access.py    LightAccess (pydantic, strict): allows(), unknown(), describe()
 aurorahue/core/color.py     Hex, Kelvin, Color, parse_color (InvalidColor), hex_to_xy, xy_to_hex,
                             kelvin_to_mirek, mirek_to_kelvin, parse_brightness
-aurorahue/services/lights.py  LightService: 60 s light cache, allowed(), resolve(), apply() ->
-                            ApplyReport; LightRequest (on, colour, brightness %); every write checks
-                            LightAccess again
+aurorahue/services/lights.py  LightService: 60 s light cache, allowed(), resolve(),
+                            apply(fresh=) -> ApplyReport; LightRequest (on True/False/None = keep,
+                            colour, brightness %); Outcome.QUEUED (D35); on_targets() (D31); every
+                            write checks LightAccess again
+aurorahue/services/pending.py PendingChanges: in-memory queued colour/brightness per light, 30 min
+                            (D35-D38); owned by LightService, lost on restart
 aurorahue/services/scenes.py  SceneService (sessions, LightService, clock): list/get/get_by_id/
                             create/update/delete/actions_for_run/run; validates on save (D13)
 aurorahue/services/settings.py  SettingsService: get_settings(), set_reset_scene(),
-                            set_daytime_confirm() (D18, D19, D25)
+                            set_daytime_confirm(), set_on_exclude() (D18, D19, D25, D31)
 aurorahue/services/model.py StrictModel (frozen, strict pydantic), SessionFactory
 aurorahue/db/               base.py (Base, naming convention, TIMESTAMPTZ), session.py, migrate.py,
                             url.py (DATABASE_URL only, for Alembic), models.py (Scene, SceneAction,
@@ -118,12 +121,13 @@ aurorahue/cogs/common.py    is_allowed(), ConfirmView, confirm_if_daytime (D21, 
 aurorahue/cogs/lights.py    /on /off /color /brightness [lights], /lights
 aurorahue/cogs/scenes.py    /scene list|add|edit|delete|run, /reset; scene list rendering
 aurorahue/cogs/scene_builder.py  SceneBuilder view (D16), ActionForm modal, parse_action, rendering
-aurorahue/cogs/settings.py  /settings [reset-scene] [daytime-confirm] (D18, D26)
+aurorahue/cogs/settings.py  /settings [reset-scene] [daytime-confirm] [on-exclude] (D18, D26, D32)
 aurorahue/hue/hue_client.py HueClient (httpx2, CLIP v2, verify=False): list_lights() -> BridgeLight,
-                            apply(id, LightState) (one PUT); HTTP errors -> BridgeUnavailable
+                            apply(id, LightState) (one PUT; on=None leaves `on` out); HTTP errors
+                            -> BridgeUnavailable
 aurorahue/helpers/sun_finder.py  astral sunrise/sunset; is_daytime() (±30 min)
 ```
-Tables (migrations `0002`, `0003`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1).
+Tables (migrations `0002`–`0004`): `scenes`, `scene_actions`, `bot_settings` (one row, id 1).
 Tests: `tests/unit` (layering, access file, colour, light service with a fake client, reply and
 scene rendering), `tests/integration` (migrations, scenes and settings services;
 fixtures in `conftest.py`, fake bridge in `tests/support/`). New code in `core`/`services`/`hue` uses absolute imports (the layering test only
@@ -159,13 +163,17 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 **Light commands** (all gated by `ALLOWED_USER_IDS`, D20):
 | Command | Does |
 |---|---|
-| `/on [lights]` | switch on, keeping colour and brightness (D7) |
+| `/on [lights]` | switch on, keeping colour and brightness (D7); without `lights`, leaves the `on-exclude` lights alone, without saying so (D31, D33) |
 | `/off [lights]` | switch off; never asks (D7) |
-| `/color color [lights]` | hex (`#ff8800`, `f80`) or temperature (`2700K`, 2000–6500), switches on (D8, D9) |
-| `/brightness percent [lights]` | 0–100, 0 = lowest glow, not off; switches on (D8, D10) |
+| `/color color [lights]` | hex (`#ff8800`, `f80`) or temperature (`2700K`, 2000–6500); lights that are on change, off lights queue it (D9, D28, D35) |
+| `/brightness percent [lights]` | 0–100, 0 = lowest glow, not off; lights that are on change, off lights queue it (D10, D28, D35) |
 | `/lights` | allowed lights with on/off, brightness, colour; ephemeral (D23) |
 
 - `lights`: comma-separated names, autocomplete per D6; empty = all allowed lights.
+- `/color`, `/brightness` never switch a light on (D28): they defer publicly, then
+  `apply(…, fresh=True)`. Off lights come back as `Outcome.QUEUED` ("Queued until switched on
+  (30 min): …"); the next switch-on **by the bot** (`/on`, `/scene run`, `/reset`) sends it in the
+  same PUT (D35, D36). No daytime confirmation (D30).
 - Daytime confirmation (D21) only when the setting is on (D25, default off), it's daytime and a
   targeted light is off right now (fresh bridge read,
   2 s limit so Discord's 3 s answer window holds). `confirm_if_daytime` answers the interaction;
@@ -181,7 +189,7 @@ db/     hue/     core/ (pure: colour maths, access rules, parsing, errors, limit
 | `/scene add name` / `/scene edit scene [new-name]` | open the scene builder (D16); rename applied on Save |
 | `/scene delete scene` | Delete / Cancel; extra line and the setting cleared if it's the reset scene (D19) |
 | `/scene run scene` · `/reset` | apply the actions (D17); daytime confirmation if an off light goes on (D21) |
-| `/settings [reset-scene] [daytime-confirm]` | show; set or `none` to clear the reset scene (D18); daytime confirmation `on`/`off` (D25, D26) |
+| `/settings [reset-scene] [daytime-confirm] [on-exclude]` | show; set or `none` to clear the reset scene (D18); daytime confirmation `on`/`off` (D25, D26); lights a bare `/on` leaves alone, comma-separated names replacing the list, `none` clears (D31, D32, D34) |
 
 - A scene: unique name (1–50, any case), ≥ 1 action, one per light; an action is on/off + optional
   colour (hex or Kelvin, stored `#rrggbb` / `2700K`) + optional brightness; "off" takes neither
@@ -220,7 +228,7 @@ From `lights-and-scenes` (the archived brief has the details). Each finished bri
 - **D5** Light list from the bridge, cached 60 s; bridge down at startup → bot starts anyway.
 - **D6** `lights` option: comma-separated names, autocomplete appends; empty = all; bad name = error, nothing changes.
 - **D7** `/on` only switches on (keeps colour/brightness); `/off` only switches off.
-- **D8** `/color` and `/brightness` also switch lights on.
+- **D8** Replaced by D28.
 - **D9** One colour field: hex (`#rrggbb`/`rgb`) or Kelvin (`2700K`, 2000–6500); hex → xy, Kelvin → mirek clamped per light.
 - **D10** Brightness 0–100 %; 0 = lowest glow, not off.
 - **D11** A light that can't show the colour still gets on/off + brightness; reply says "colour skipped for".
@@ -245,6 +253,29 @@ From `daytime-confirm-setting`:
   off = never ask.
 - **D26** `/settings daytime-confirm:on|off`; can be combined with `reset-scene`; `/settings` shows both.
 - **D27** The sun check, `astral` and `LATITUDE`/`LONGITUDE` stay (needed when D25 is on).
+
+From `light-command-tweaks`:
+
+- **D28** `/color` and `/brightness` never switch a light on: lights that are on change now; off
+  lights queue the change (D35). Replaces D8.
+- **D29** Replaced by D35 (all off → queued, normal public reply).
+- **D30** So `/color` and `/brightness` never ask the daytime confirmation; D21 covers `/on`,
+  `/scene run` and `/reset`.
+- **D31** Setting `bot_settings.on_exclude` (light UUIDs): lights `/on` **without** `lights` leaves
+  alone. Named `/on` and every other command ignore it.
+- **D32** `/settings on-exclude:<names>` replaces the list (D6 autocomplete); `none` clears; a bad
+  name changes no setting.
+- **D33** A bare `/on` doesn't mention excluded lights; all lights excluded → ephemeral error.
+- **D34** Only allowed lights are saved; IDs that become disallowed or leave the bridge are ignored
+  by `/on` and counted, not named, by `/settings` ("+N not controllable").
+- **D35** `/color`/`/brightness` on an off light queue the change in memory, 30 min from the latest
+  change to that light; lost on restart. Reply: "Queued until switched on (30 min): …".
+- **D36** Applied only when the bot switches the light on (`/on`, `/scene run`, `/reset`), in the
+  same PUT; not when it's switched on outside the bot.
+- **D37** Per field, newer queued values replace older ones; the switch-on request's own colour and
+  brightness win (scene wins), the queue fills the gaps.
+- **D38** Used once; dropped after a successful switch-on or a direct change while the light is on;
+  `/off` and a failed PUT keep it.
 
 ---
 

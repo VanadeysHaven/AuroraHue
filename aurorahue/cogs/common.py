@@ -15,6 +15,7 @@ from discord import app_commands
 from aurorahue.core.errors import AuroraHueError, BridgeUnavailable
 from aurorahue.helpers import sun_finder
 from aurorahue.services.lights import ApplyReport, LightService, Outcome
+from aurorahue.services.pending import PENDING_TTL
 from aurorahue.services.scenes import SceneService
 from aurorahue.services.settings import SettingsService
 
@@ -206,10 +207,12 @@ def _join(names: list[str]) -> str:
 
 def report_text(report: ApplyReport, verb: str, suffix: str = "") -> str:
     """D22 reply for a light change: "Turned on 3 lights. Colour skipped for: Hallway.
-    Didn't answer: Desk." `verb` and `suffix` frame the lights: "Set" … " to #ff8800"."""
+    Queued until switched on (30 min): Hall. Didn't answer: Desk." `verb` and `suffix` frame the
+    lights: "Set" … " to #ff8800"."""
+    queued = report.names(Outcome.QUEUED)
     changed = report.names(Outcome.OK, Outcome.COLOR_SKIPPED)
     if not changed:
-        parts = ["No lights changed."]
+        parts = [] if queued else ["No lights changed."]
     elif len(changed) == 1:
         parts = [f"{verb} {escape(changed[0])}{suffix}."]
     else:
@@ -217,6 +220,9 @@ def report_text(report: ApplyReport, verb: str, suffix: str = "") -> str:
 
     if skipped := report.names(Outcome.COLOR_SKIPPED):
         parts.append(f"Colour skipped for: {_join(skipped)}.")
+    if queued:  # D35
+        minutes = int(PENDING_TTL.total_seconds() // 60)
+        parts.append(f"{len(queued)} lights are off, turn them on with `/on` to apply changes.")
     if failed := report.names(Outcome.FAILED):
         parts.append(f"Didn't answer: {_join(failed)}.")
     if not_allowed := report.names(Outcome.NOT_ALLOWED):
